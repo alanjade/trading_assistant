@@ -1,3 +1,9 @@
+// ── State sync helpers ────────────────────────────────────────────────────────
+
+import type { AppStateExport } from './stateIO';
+import { serializeState } from './stateIO';
+import { getOptionalEnv } from './env';
+
 // ── supabase.ts ───────────────────────────────────────────────────────────────
 // Feature #4 Supabase option (auth + cloud sync)
 //
@@ -22,8 +28,8 @@
 //   4. Install the client: npm install @supabase/supabase-js
 
 // Guard: this module does nothing if Supabase env vars are absent
-const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? '';
-const SUPABASE_KEY  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const SUPABASE_URL = getOptionalEnv('NEXT_PUBLIC_SUPABASE_URL');
+const SUPABASE_KEY = getOptionalEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
 export const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
@@ -34,9 +40,13 @@ let _client: unknown = null;
 async function getClient() {
   if (!SUPABASE_ENABLED) return null;
   if (_client) return _client as import('@supabase/supabase-js').SupabaseClient;
-  const { createClient } = await import('@supabase/supabase-js').catch(() => ({ createClient: null }));
+  const { createClient } = await import('@supabase/supabase-js').catch(() => ({
+    createClient: null,
+  }));
   if (!createClient) {
-    console.warn('[Supabase] @supabase/supabase-js not installed. Run: npm install @supabase/supabase-js');
+    console.warn(
+      '[Supabase] @supabase/supabase-js not installed. Run: npm install @supabase/supabase-js'
+    );
     return null;
   }
   _client = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -46,7 +56,7 @@ async function getClient() {
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 export interface SupabaseUser {
-  id:    string;
+  id: string;
   email: string | undefined;
 }
 
@@ -70,37 +80,36 @@ export async function signOut(): Promise<void> {
 export async function getCurrentUser(): Promise<SupabaseUser | null> {
   const sb = await getClient();
   if (!sb) return null;
-  const { data: { user } } = await sb.auth.getUser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
   if (!user) return null;
   return { id: user.id, email: user.email };
 }
 
 /** Subscribe to auth state changes. Returns unsubscribe fn. */
 export async function onAuthStateChange(
-  cb: (user: SupabaseUser | null) => void,
+  cb: (user: SupabaseUser | null) => void
 ): Promise<() => void> {
   const sb = await getClient();
   if (!sb) return () => {};
-  const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+  const {
+    data: { subscription },
+  } = sb.auth.onAuthStateChange((_event, session) => {
     const u = session?.user;
     cb(u ? { id: u.id, email: u.email } : null);
   });
   return () => subscription.unsubscribe();
 }
 
-// ── State sync helpers ────────────────────────────────────────────────────────
-
-import type { AppStateExport } from './stateIO';
-import { serializeState } from './stateIO';
-
 /**
  * Push current store state to Supabase (upsert by user_id).
  */
 export async function pushStateToCloud(
-  storeState: Record<string, unknown>,
+  storeState: Record<string, unknown>
 ): Promise<{ ok: boolean; error?: string }> {
-  const sb   = await getClient();
-  if (!sb)   return { ok: false, error: 'Supabase not configured' };
+  const sb = await getClient();
+  if (!sb) return { ok: false, error: 'Supabase not configured' };
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
@@ -123,8 +132,8 @@ export async function pullStateFromCloud(): Promise<{
   data?: AppStateExport;
   error?: string;
 }> {
-  const sb   = await getClient();
-  if (!sb)   return { ok: false, error: 'Supabase not configured' };
+  const sb = await getClient();
+  if (!sb) return { ok: false, error: 'Supabase not configured' };
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: 'Not signed in' };
 
@@ -161,7 +170,7 @@ let _syncInterval: ReturnType<typeof setInterval> | null = null;
  */
 export function startAutoSync(
   getState: () => Record<string, unknown>,
-  intervalMs = 300_000, // 5 min
+  intervalMs = 300_000 // 5 min
 ): () => void {
   if (!SUPABASE_ENABLED) return () => {};
   if (_syncInterval) clearInterval(_syncInterval);
@@ -171,6 +180,9 @@ export function startAutoSync(
     await pushStateToCloud(getState());
   }, intervalMs);
   return () => {
-    if (_syncInterval) { clearInterval(_syncInterval); _syncInterval = null; }
+    if (_syncInterval) {
+      clearInterval(_syncInterval);
+      _syncInterval = null;
+    }
   };
 }

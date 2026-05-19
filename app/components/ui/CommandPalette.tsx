@@ -1,51 +1,53 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useStore } from '@/lib/store';
-import { fmtSymDisplay } from '@/lib/indicators';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from '@/components/ui/Toast';
+import { fmtSymDisplay } from '@/lib/indicators';
+import { useStore } from '@/lib/store';
+import { eventBus } from '@/lib/streamEvents';
 
-// ── Shortcut definitions ──────────────────────────────────────────────────────
 const TF_KEYS: Record<string, string> = {
-  '1': '1m', '2': '5m', '3': '15m', '4': '1h', '5': '4h', '6': '1d',
+  '1': '1m',
+  '2': '5m',
+  '3': '15m',
+  '4': '1h',
+  '5': '4h',
+  '6': '1d',
 };
 
-const TAB_KEYS: Record<string, string> = {
-  'c': 'chart', 'k': 'calc', 'j': 'journal', 's': 'strategy',
+type TabKey = 'chart' | 'calc' | 'journal' | 'strategy' | 'screener';
+const TAB_KEYS: Record<string, TabKey> = {
+  c: 'chart',
+  k: 'calc',
+  j: 'journal',
+  s: 'strategy',
 };
 
-// ── useKeyboardShortcuts ──────────────────────────────────────────────────────
-// Mount once at root. Handles all global shortcuts except Cmd+K (done in palette).
 export function useKeyboardShortcuts(
   onOpenPalette: () => void,
-  symbolInputRef?: React.RefObject<HTMLInputElement | null>,
+  symbolInputRef?: React.RefObject<HTMLInputElement | null>
 ) {
   const { setTf } = useStore();
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag);
 
-      // Cmd+K / Ctrl+K → command palette (works everywhere)
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         onOpenPalette();
         return;
       }
-
-      // Everything below blocked when typing in input
       if (inInput) return;
 
-      // Tab shortcuts
       const tabKey = TAB_KEYS[e.key.toLowerCase()];
       if (tabKey) {
-        useStore.setState({ activeTab: tabKey as any });
+        useStore.setState({ activeTab: tabKey });
         toast.info(`Switched to ${tabKey}`);
         return;
       }
 
-      // Timeframe shortcuts
       const tf = TF_KEYS[e.key];
       if (tf) {
         setTf(tf);
@@ -53,69 +55,128 @@ export function useKeyboardShortcuts(
         return;
       }
 
-      // S → focus symbol search
       if (e.key === '/' || (e.key === 's' && !e.metaKey && !e.ctrlKey)) {
         e.preventDefault();
         symbolInputRef?.current?.focus();
         return;
       }
-
-      // F → fullscreen (placeholder — wired in CandleChart)
       if (e.key === 'f' || e.key === 'F') {
-        window.dispatchEvent(new CustomEvent('chart:fullscreen'));
+        eventBus.emit('chart:fullscreen');
         return;
       }
     };
-
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onOpenPalette, setTf, symbolInputRef]);
 }
 
-// ── Command palette types ─────────────────────────────────────────────────────
 interface PaletteAction {
-  id:       string;
-  label:    string;
-  hint?:    string;
-  icon?:    string;
-  group:    string;
-  run:      () => void;
+  id: string;
+  label: string;
+  hint?: string;
+  icon?: string;
+  group: string;
+  run: () => void;
 }
 
-// ── CommandPalette ────────────────────────────────────────────────────────────
 export default function CommandPalette({
   open,
   onClose,
+  anchorRef,
 }: {
-  open:    boolean;
+  open: boolean;
   onClose: () => void;
+  anchorRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
-  const [query, setQuery]   = useState('');
+  const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
-  const inputRef            = useRef<HTMLInputElement>(null);
-  const store               = useStore();
+  const [dropPos, setDropPos] = useState({ top: 48, right: 14 });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const store = useStore();
 
-  // Build action list dynamically
+  useEffect(() => {
+    if (open && anchorRef?.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      setDropPos({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    }
+  }, [open, anchorRef]);
+
   const actions: PaletteAction[] = [
-    // Tabs
-    { id: 'tab-chart',    label: 'Go to Chart',       hint: 'C',         icon: '📈', group: 'Navigation', run: () => { useStore.setState({ activeTab: 'chart' });    onClose(); } },
-    { id: 'tab-calc',     label: 'Go to Calculator',  hint: 'K',         icon: '🧮', group: 'Navigation', run: () => { useStore.setState({ activeTab: 'calc' });     onClose(); } },
-    { id: 'tab-journal',  label: 'Go to Journal',     hint: 'J',         icon: '📓', group: 'Navigation', run: () => { useStore.setState({ activeTab: 'journal' });  onClose(); } },
-    { id: 'tab-strategy', label: 'Go to Strategy',    hint: 'S',         icon: '⚡', group: 'Navigation', run: () => { useStore.setState({ activeTab: 'strategy' }); onClose(); } },
-    // Timeframes
-    ...(['1m','5m','15m','1h','4h','1d'] as const).map((tf, i) => ({
-      id: `tf-${tf}`, label: `Set timeframe ${tf}`, hint: String(i + 1),
-      icon: '⏱', group: 'Timeframe',
-      run: () => { store.setTf(tf); toast.info(`Timeframe → ${tf}`); onClose(); },
+    {
+      id: 'tab-chart',
+      label: 'Go to Chart',
+      hint: 'C',
+      icon: '📈',
+      group: 'Navigation',
+      run: () => {
+        useStore.setState({ activeTab: 'chart' });
+        onClose();
+      },
+    },
+    {
+      id: 'tab-calc',
+      label: 'Go to Calculator',
+      hint: 'K',
+      icon: '🧮',
+      group: 'Navigation',
+      run: () => {
+        useStore.setState({ activeTab: 'calc' });
+        onClose();
+      },
+    },
+    {
+      id: 'tab-journal',
+      label: 'Go to Journal',
+      hint: 'J',
+      icon: '📓',
+      group: 'Navigation',
+      run: () => {
+        useStore.setState({ activeTab: 'journal' });
+        onClose();
+      },
+    },
+    {
+      id: 'tab-strategy',
+      label: 'Go to Strategy',
+      hint: 'S',
+      icon: '⚡',
+      group: 'Navigation',
+      run: () => {
+        useStore.setState({ activeTab: 'strategy' });
+        onClose();
+      },
+    },
+    ...(['1m', '5m', '15m', '1h', '4h', '1d'] as const).map((tf, i) => ({
+      id: `tf-${tf}`,
+      label: `Set timeframe ${tf}`,
+      hint: String(i + 1),
+      icon: '⏱',
+      group: 'Timeframe',
+      run: () => {
+        store.setTf(tf);
+        toast.info(`Timeframe → ${tf}`);
+        onClose();
+      },
     })),
-    // Symbols
-    ...['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','BNBUSDT','TONUSDT'].map(sym => ({
-      id: `sym-${sym}`, label: `Load ${fmtSymDisplay(sym)}`, icon: '💰', group: 'Symbols',
-      run: () => { store.setSym(sym); toast.info(`Symbol → ${fmtSymDisplay(sym)}`); onClose(); },
+    ...['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'TONUSDT'].map((sym) => ({
+      id: `sym-${sym}`,
+      label: `Load ${fmtSymDisplay(sym)}`,
+      icon: '💰',
+      group: 'Symbols',
+      run: () => {
+        store.setSym(sym);
+        toast.info(`Symbol → ${fmtSymDisplay(sym)}`);
+        onClose();
+      },
     })),
-    // Theme
-    { id: 'theme-toggle', label: `Switch to ${store.theme === 'dark' ? 'light' : 'dark'} theme`,
-      icon: store.theme === 'dark' ? '☀' : '☾', group: 'Settings',
+    {
+      id: 'theme-toggle',
+      label: `Switch to ${store.theme === 'dark' ? 'light' : 'dark'} theme`,
+      icon: store.theme === 'dark' ? '☀' : '☾',
+      group: 'Settings',
       run: () => {
         const next = store.theme === 'dark' ? 'light' : 'dark';
         store.setSettings({ theme: next });
@@ -123,32 +184,41 @@ export default function CommandPalette({
         onClose();
       },
     },
-    // Indicators
-    { id: 'ind-panel', label: 'Open Indicator Panel', icon: '📊', group: 'Chart',
-      run: () => { window.dispatchEvent(new CustomEvent('chart:openIndicators')); onClose(); },
+    {
+      id: 'ind-panel',
+      label: 'Open Indicator Panel',
+      icon: '📊',
+      group: 'Chart',
+      run: () => {
+        eventBus.emit('chart:openIndicators');
+        onClose();
+      },
     },
-    { id: 'chart-fullscreen', label: 'Toggle Fullscreen Chart', hint: 'F', icon: '⛶', group: 'Chart',
-      run: () => { window.dispatchEvent(new CustomEvent('chart:fullscreen')); onClose(); },
+    {
+      id: 'chart-fullscreen',
+      label: 'Toggle Fullscreen Chart',
+      hint: 'F',
+      icon: '⛶',
+      group: 'Chart',
+      run: () => {
+        eventBus.emit('chart:fullscreen');
+        onClose();
+      },
     },
   ];
 
-  // Filter
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? actions.filter(a =>
-        a.label.toLowerCase().includes(q) ||
-        a.group.toLowerCase().includes(q) ||
-        (a.hint ?? '').toLowerCase().includes(q)
+    ? actions.filter(
+        (a) =>
+          a.label.toLowerCase().includes(q) ||
+          a.group.toLowerCase().includes(q) ||
+          (a.hint ?? '').toLowerCase().includes(q)
       )
     : actions;
+  const groups = [...new Set(filtered.map((a) => a.group))];
 
-  // Group
-  const groups = [...new Set(filtered.map(a => a.group))];
-
-  // Reset cursor when filter changes
   useEffect(() => setCursor(0), [query]);
-
-  // Focus input when opened
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -164,10 +234,22 @@ export default function CommandPalette({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape')    { onClose(); return; }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, filtered.length - 1)); }
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)); }
-      if (e.key === 'Enter')     { e.preventDefault(); runCurrent(); }
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCursor((c) => Math.min(c + 1, filtered.length - 1));
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCursor((c) => Math.max(c - 1, 0));
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runCurrent();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -177,127 +259,75 @@ export default function CommandPalette({
 
   let globalIdx = -1;
 
-  return (
+  const palette = (
     <>
-      {/* Backdrop */}
+      <div className="fixed inset-0 z-[9000]" onClick={onClose} aria-hidden />
+
       <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 9000,
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(2px)',
-        }}
-      />
-
-      {/* Palette */}
-      <div style={{
-        position:     'fixed',
-        top:          '18%',
-        left:         '50%',
-        transform:    'translateX(-50%)',
-        zIndex:       9001,
-        width:        'min(520px, 92vw)',
-        background:   'var(--bg2)',
-        border:       '1px solid var(--border2)',
-        borderRadius: 'var(--radius)',
-        boxShadow:    '0 24px 80px rgba(0,0,0,0.6)',
-        overflow:     'hidden',
-        animation:    'paletteIn .15s cubic-bezier(.16,1,.3,1)',
-      }}>
-        <style>{`
-          @keyframes paletteIn {
-            from { opacity:0; transform:translateX(-50%) scale(0.97) translateY(-8px); }
-            to   { opacity:1; transform:translateX(-50%) scale(1)    translateY(0);    }
-          }
-        `}</style>
-
-        {/* Search */}
-        <div style={{
-          display:      'flex',
-          alignItems:   'center',
-          gap:          10,
-          padding:      '12px 16px',
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <span style={{ fontSize: 14, color: 'var(--text3)' }}>⌘</span>
+        className="fixed z-[9001] w-[min(400px,calc(100vw-28px))] bg-bg2 border border-border2 rounded overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.04)] animate-drop-in"
+        style={{ top: dropPos.top, right: dropPos.right }}
+      >
+        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border bg-bg3">
+          <span className="font-mono text-[13px] text-text3 shrink-0">⌘</span>
           <input
             ref={inputRef}
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search commands…"
-            style={{
-              flex: 1, border: 'none', outline: 'none',
-              background: 'transparent',
-              fontSize: 13, fontFamily: 'var(--mono)',
-              color: 'var(--text)',
-            }}
+            className="flex-1 border-0 outline-none bg-transparent font-mono text-xs text-text"
           />
-          <span style={{
-            fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--text3)',
-            padding: '2px 6px', border: '1px solid var(--border2)',
-            borderRadius: 4, background: 'var(--bg3)',
-          }}>ESC</span>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close (Esc)"
+            className="flex items-center justify-center w-[22px] h-[22px] shrink-0 border border-border2 rounded bg-bg4 text-text3 cursor-pointer font-mono text-[13px] leading-none transition-colors hover:text-text2"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* Results */}
-        <div style={{ maxHeight: 380, overflowY: 'auto', padding: '6px 0' }}>
+        <div className="max-h-[340px] overflow-y-auto">
           {filtered.length === 0 ? (
-            <div style={{ padding: '20px', textAlign: 'center', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
-              No commands match "{query}"
+            <div className="font-mono text-11px text-text3 text-center py-[18px]">
+              No commands match &quot;{query}&quot;
             </div>
           ) : (
-            groups.map(group => {
-              const items = filtered.filter(a => a.group === group);
+            groups.map((group) => {
+              const items = filtered.filter((a) => a.group === group);
               return (
                 <div key={group}>
-                  <div style={{
-                    padding: '6px 16px 3px',
-                    fontSize: 9, fontFamily: 'var(--mono)',
-                    color: 'var(--text3)', textTransform: 'uppercase',
-                    letterSpacing: '.1em',
-                  }}>
+                  <div className="font-mono text-9px text-text3 uppercase tracking-widest px-3 pt-1.5 pb-0.5 border-t border-border">
                     {group}
                   </div>
-                  {items.map(action => {
+                  {items.map((action) => {
                     globalIdx++;
-                    const idx     = globalIdx;
-                    const active  = idx === cursor;
+                    const idx = globalIdx;
+                    const active = idx === cursor;
                     return (
                       <div
                         key={action.id}
                         onClick={action.run}
                         onMouseEnter={() => setCursor(idx)}
-                        style={{
-                          display:        'flex',
-                          alignItems:     'center',
-                          gap:            10,
-                          padding:        '8px 16px',
-                          cursor:         'pointer',
-                          background:     active ? 'var(--bg3)' : 'transparent',
-                          borderLeft:     `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                          transition:     'background .08s',
-                        }}
+                        className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors border-l-2 ${
+                          active
+                            ? 'bg-bg3 border-l-accent'
+                            : 'bg-transparent border-l-transparent'
+                        }`}
                       >
                         {action.icon && (
-                          <span style={{ fontSize: 13, flexShrink: 0, width: 20, textAlign: 'center' }}>
+                          <span className="text-[13px] w-[18px] text-center shrink-0">
                             {action.icon}
                           </span>
                         )}
-                        <span style={{
-                          flex: 1, fontSize: 12, fontFamily: 'var(--mono)',
-                          color: active ? 'var(--text)' : 'var(--text2)',
-                          fontWeight: active ? 600 : 400,
-                        }}>
+                        <span
+                          className={`flex-1 font-mono text-xs ${
+                            active ? 'text-text font-semibold' : 'text-text2 font-normal'
+                          }`}
+                        >
                           {action.label}
                         </span>
                         {action.hint && (
-                          <span style={{
-                            fontSize: 9, fontFamily: 'var(--mono)',
-                            padding: '1px 6px', borderRadius: 4,
-                            border: '1px solid var(--border2)',
-                            background: 'var(--bg4)',
-                            color: 'var(--text3)',
-                          }}>
+                          <span className="font-mono text-9px text-text3 px-1.5 py-px border border-border2 rounded-sm bg-bg4">
                             {action.hint}
                           </span>
                         )}
@@ -310,16 +340,14 @@ export default function CommandPalette({
           )}
         </div>
 
-        {/* Footer */}
-        <div style={{
-          padding: '8px 16px',
-          borderTop: '1px solid var(--border)',
-          display: 'flex', gap: 14,
-          fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--text3)',
-        }}>
-          {[['↑↓', 'navigate'], ['↵', 'run'], ['esc', 'close']].map(([key, label]) => (
-            <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ padding: '1px 5px', border: '1px solid var(--border2)', borderRadius: 3, background: 'var(--bg3)' }}>{key}</span>
+        <div className="flex gap-3 items-center px-3 py-1.5 border-t border-border bg-bg3">
+          {[
+            ['↑↓', 'navigate'],
+            ['↵', 'run'],
+            ['esc', 'close'],
+          ].map(([key, label]) => (
+            <span key={key} className="flex items-center gap-1 font-mono text-9px text-text3">
+              <span className="px-1 py-px border border-border2 rounded-sm bg-bg2">{key}</span>
               {label}
             </span>
           ))}
@@ -327,4 +355,6 @@ export default function CommandPalette({
       </div>
     </>
   );
+
+  return typeof document !== 'undefined' ? createPortal(palette, document.body) : null;
 }

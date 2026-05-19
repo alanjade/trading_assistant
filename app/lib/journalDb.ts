@@ -1,6 +1,6 @@
 import type { TradeJournalEntry } from './store';
 
-const DB_NAME    = 'tradeassist';
+const DB_NAME = 'tradeassist';
 const DB_VERSION = 1;
 const STORE_NAME = 'trades';
 
@@ -15,13 +15,16 @@ export function openDb(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-        store.createIndex('date',    'date',    { unique: false });
-        store.createIndex('symbol',  'symbol',  { unique: false });
+        store.createIndex('date', 'date', { unique: false });
+        store.createIndex('symbol', 'symbol', { unique: false });
         store.createIndex('outcome', 'outcome', { unique: false });
       }
     };
-    req.onsuccess = () => { _db = req.result; resolve(_db); };
-    req.onerror   = () => reject(req.error);
+    req.onsuccess = () => {
+      _db = req.result;
+      resolve(_db);
+    };
+    req.onerror = () => reject(req.error);
   });
 }
 
@@ -33,7 +36,7 @@ function tx(db: IDBDatabase, mode: IDBTransactionMode) {
 function wrap<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((res, rej) => {
     req.onsuccess = () => res(req.result);
-    req.onerror   = () => rej(req.error);
+    req.onerror = () => rej(req.error);
   });
 }
 
@@ -52,7 +55,7 @@ export async function idbPutTrade(trade: TradeJournalEntry): Promise<void> {
 export async function idbPutTrades(trades: TradeJournalEntry[]): Promise<void> {
   const db = await openDb();
   const store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-  await Promise.all(trades.map(t => wrap(store.put(t))));
+  await Promise.all(trades.map((t) => wrap(store.put(t))));
 }
 
 export async function idbDeleteTrade(id: string): Promise<void> {

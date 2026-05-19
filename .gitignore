@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+ARCHITECTURE.md
+BUILD_SESSION_MAY16.md
+BUILD_SESSION.md
+CALCULATION_ARCHITECTURE_ANALYSIS.md
+CALCULATION_CONSOLIDATION_SESSION.md
+test_output.log
+TODO.md
+app/lib/__tests__/
+app/features/calculator/services/__tests__/riskRewardService.test.ts
+app/features/chart/services/__tests__/indicatorService.test.ts

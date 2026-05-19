@@ -7,45 +7,66 @@ const APP_TAG = 'tradeassist';
  */
 const SAFE_KEYS = [
   // Symbol & timeframe
-  'sym', 'tf',
+  'sym',
+  'tf',
   // Journal
   'trades',
   // Theme & defaults
-  'theme', 'defaultSym', 'defaultTf', 'defaultLeverage',
-  'defaultFeeType', 'defaultCapital', 'defaultRR',
+  'theme',
+  'defaultSym',
+  'defaultTf',
+  'defaultLeverage',
+  'defaultFeeType',
+  'defaultCapital',
+  'defaultRR',
   // Calculator
-  'capital', 'margin', 'goalPct', 'leverage', 'feeType', 'rrRatio',
-  'entryPrice', 'stopPrice', 'sizeUsd', 'tokens', 'currentDir',
+  'capital',
+  'margin',
+  'goalPct',
+  'leverage',
+  'feeType',
+  'rrRatio',
+  'entryPrice',
+  'stopPrice',
+  'sizeUsd',
+  'tokens',
+  'currentDir',
   // Indicators
-  'activeIndicators', 'indicatorParams',
+  'activeIndicators',
+  'indicatorParams',
   // Strategies
-  'strategies', 'activeStrategyId',
+  'strategies',
+  'activeStrategyId',
   // Chart drawings + ATR trail
-  'chartDrawings', 'atrTrailMult',
+  'chartDrawings',
+  'atrTrailMult',
   // Alerts & audio
-  'maxDailyLossUsd', 'soundEnabled', 'notifEnabled', 'priceAlerts',
+  'maxDailyLossUsd',
+  'soundEnabled',
+  'notifEnabled',
+  'priceAlerts',
   // Paper account (without open positions — those are ephemeral)
   'paperAccount',
 ] as const;
 
-export type SafeKey = typeof SAFE_KEYS[number];
+export type SafeKey = (typeof SAFE_KEYS)[number];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface AppStateExport {
-  version:    number;
-  app:        typeof APP_TAG;
+  version: number;
+  app: typeof APP_TAG;
   exportedAt: string;
-  state:      Partial<Record<SafeKey, unknown>>;
+  state: Partial<Record<SafeKey, unknown>>;
 }
 
 export interface ParseResult {
-  ok:          boolean;
-  error?:      string;
-  data?:       Partial<Record<SafeKey, unknown>>;
-  version?:    number;
+  ok: boolean;
+  error?: string;
+  data?: Partial<Record<SafeKey, unknown>>;
+  version?: number;
   exportedAt?: string;
-  keysFound?:  number;
+  keysFound?: number;
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -64,14 +85,15 @@ export function serializeState(state: Record<string, unknown>): AppStateExport {
   }
   // Strip triggered alerts
   if (Array.isArray(out.priceAlerts)) {
-    out.priceAlerts = (out.priceAlerts as Array<{ triggered: boolean }>)
-      .filter(a => !a.triggered);
+    out.priceAlerts = (out.priceAlerts as Array<{ triggered: boolean }>).filter(
+      (a) => !a.triggered
+    );
   }
   return {
-    version:    EXPORT_VERSION,
-    app:        APP_TAG,
+    version: EXPORT_VERSION,
+    app: APP_TAG,
     exportedAt: new Date().toISOString(),
-    state:      out,
+    state: out,
   };
 }
 
@@ -80,10 +102,11 @@ export function serializeState(state: Record<string, unknown>): AppStateExport {
  */
 export function downloadStateJSON(state: Record<string, unknown>): void {
   const payload = serializeState(state);
-  const blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const a       = document.createElement('a');
-  a.href        = URL.createObjectURL(blob);
-  a.download    = `tradeassist_${new Date().toISOString().slice(0, 10)}.json`;
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  if (typeof document === 'undefined') return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tradeassist_${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -128,22 +151,21 @@ export function parseStateImport(json: string): ParseResult {
   }
 
   return {
-    ok:          true,
+    ok: true,
     data,
-    version:     typeof obj['version'] === 'number' ? obj['version'] : undefined,
-    exportedAt:  typeof obj['exportedAt'] === 'string' ? obj['exportedAt'] : undefined,
-    keysFound:   Object.keys(data).length,
+    version: typeof obj['version'] === 'number' ? obj['version'] : undefined,
+    exportedAt: typeof obj['exportedAt'] === 'string' ? obj['exportedAt'] : undefined,
+    keysFound: Object.keys(data).length,
   };
 }
 
 /**
  * Open a file-picker dialog and call onResult with the parsed content.
  */
-export function openImportFilePicker(
-  onResult: (result: ParseResult) => void,
-): void {
+export function openImportFilePicker(onResult: (result: ParseResult) => void): void {
+  if (typeof document === 'undefined') return onResult({ ok: false, error: 'Not available on server' });
   const input = document.createElement('input');
-  input.type  = 'file';
+  input.type = 'file';
   input.accept = '.json,application/json';
   input.onchange = () => {
     const file = input.files?.[0];
@@ -170,16 +192,17 @@ export function encodeStrategyToURL(strategy: object): string {
   try {
     const json = JSON.stringify(strategy);
     // TextEncoder → Uint8Array → base64 (handles non-ASCII strategy names)
-    const bytes  = new TextEncoder().encode(json);
-    const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
-    const b64    = btoa(binary);
-    const url    = new URL(window.location.href);
+    const bytes = new TextEncoder().encode(json);
+    const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join('');
+    const b64 = btoa(binary);
+    if (typeof window === 'undefined') return '';
+    const url = new URL(window.location.href);
     // Clean path — strip existing ?strategy if any
     url.search = '';
     url.searchParams.set('strategy', b64);
     return url.toString();
   } catch {
-    return window.location.href;
+    return typeof window === 'undefined' ? '' : window.location.href;
   }
 }
 
@@ -189,12 +212,13 @@ export function encodeStrategyToURL(strategy: object): string {
  */
 export function decodeStrategyFromURL(): object | null {
   try {
+    if (typeof window === 'undefined') return null;
     const b64 = new URLSearchParams(window.location.search).get('strategy');
     if (!b64) return null;
     const binary = atob(b64);
-    const bytes  = Uint8Array.from(binary, c => c.charCodeAt(0));
-    const json   = new TextDecoder().decode(bytes);
-    const obj    = JSON.parse(json);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    const obj = JSON.parse(json);
     // Basic sanity check
     if (typeof obj !== 'object' || !obj || !('name' in obj)) return null;
     return obj;
@@ -208,7 +232,9 @@ export function decodeStrategyFromURL(): object | null {
  */
 export async function copyStrategyURL(strategy: object): Promise<boolean> {
   try {
+    if (typeof navigator === 'undefined') return false;
     const url = encodeStrategyToURL(strategy);
+    if (!url) return false;
     await navigator.clipboard.writeText(url);
     return true;
   } catch {
@@ -220,6 +246,7 @@ export async function copyStrategyURL(strategy: object): Promise<boolean> {
  * Remove the ?strategy= param from the URL without a page reload.
  */
 export function clearStrategyURLParam(): void {
+  if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
   url.searchParams.delete('strategy');
   window.history.replaceState({}, '', url.toString());

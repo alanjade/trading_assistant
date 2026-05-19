@@ -1,27 +1,29 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
-import { useStore }  from '@/lib/store';
-import { useTheme }  from '@/components/ui/ThemeToggle';
-import { toast }     from '@/components/ui/Toast';
+import { useState } from 'react';
+import { ActionBtn } from '@/components/ui';
 import { resetOnboarding } from '@/components/ui/Onboarding';
+import { useTheme } from '@/components/ui/ThemeToggle';
+import { toast } from '@/components/ui/Toast';
+import { downloadStateJSON, openImportFilePicker, type ParseResult } from '@/lib/stateIO';
+import { useStore } from '@/lib/store';
 import {
-  downloadStateJSON,
-  openImportFilePicker,
-  type ParseResult,
-} from '@/lib/stateIO';
-import { SUPABASE_ENABLED, getCurrentUser, signInWithEmail, signOut, pushStateToCloud, pullStateFromCloud } from '@/lib/supabase';
+  pullStateFromCloud,
+  pushStateToCloud,
+  signInWithEmail,
+  signOut,
+  SUPABASE_ENABLED,
+} from '@/lib/supabase';
 
-// ── Sub-section ───────────────────────────────────────────────────────────────
+const inp =
+  'px-2.5 py-1.5 text-11px font-mono bg-bg3 text-text border border-border2 rounded-sm outline-none w-[110px]';
+const inpWide = `${inp} w-[200px]`;
+const inpNarrow = `${inp} w-[90px]`;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{
-        fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700,
-        color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.1em',
-        marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid var(--border)',
-      }}>
+    <div className="mb-7">
+      <div className="text-10px font-mono font-bold text-text3 uppercase tracking-widest mb-3 pb-1.5 border-b border-border">
         {title}
       </div>
       {children}
@@ -29,12 +31,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text)', fontWeight: 500 }}>{label}</div>
-        {hint && <div style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--text3)', marginTop: 2 }}>{hint}</div>}
+    <div className="flex items-center gap-2.5 mb-2.5">
+      <div className="flex-1">
+        <div className="text-11px font-mono text-text font-medium">{label}</div>
+        {hint && <div className="text-9px font-mono text-text3 mt-0.5">{hint}</div>}
       </div>
       {children}
     </div>
@@ -43,70 +53,34 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
       onClick={() => onChange(!on)}
-      style={{
-        width: 36, height: 20, borderRadius: 10, flexShrink: 0,
-        background: on ? 'var(--accent)' : 'var(--bg4)',
-        border: `1px solid ${on ? 'var(--accent)' : 'var(--border2)'}`,
-        cursor: 'pointer', position: 'relative', transition: 'all .2s',
-      }}
+      className={`relative w-9 h-5 rounded-full shrink-0 cursor-pointer transition-all border ${
+        on ? 'bg-accent border-accent' : 'bg-bg4 border-border2'
+      }`}
     >
-      <div style={{
-        position: 'absolute', top: 3,
-        left: on ? 17 : 3,
-        width: 12, height: 12, borderRadius: '50%',
-        background: on ? '#000' : 'var(--text3)',
-        transition: 'left .2s',
-      }} />
-    </div>
+      <span
+        className={`absolute top-[3px] w-3 h-3 rounded-full transition-[left] duration-200 ${
+          on ? 'left-[17px] bg-black' : 'left-[3px] bg-text3'
+        }`}
+      />
+    </button>
   );
 }
-
-const inp: React.CSSProperties = {
-  padding: '5px 9px', fontSize: 11, fontFamily: 'var(--mono)',
-  background: 'var(--bg3)', color: 'var(--text)',
-  border: '1px solid var(--border2)', borderRadius: 'var(--radius-sm)',
-  outline: 'none', width: 110,
-};
-
-const dangerBtn: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 600,
-  borderRadius: 'var(--radius-sm)', cursor: 'pointer', letterSpacing: '.04em',
-  border: '1px solid rgba(255,61,90,0.35)',
-  background: 'rgba(255,61,90,0.08)', color: 'var(--red)', transition: 'all .15s',
-};
-
-const accentBtn: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700,
-  borderRadius: 'var(--radius-sm)', cursor: 'pointer', letterSpacing: '.04em',
-  border: '1px solid var(--accent)',
-  background: 'rgba(0,229,160,0.1)', color: 'var(--accent)', transition: 'all .15s',
-};
-
-const neutralBtn: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 600,
-  borderRadius: 'var(--radius-sm)', cursor: 'pointer', letterSpacing: '.04em',
-  border: '1px solid var(--border2)',
-  background: 'var(--bg3)', color: 'var(--text2)', transition: 'all .15s',
-};
-
-// ── Main component ────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const store = useStore();
   const { theme, toggle: toggleTheme } = useTheme();
 
-  // ── Cloud sync state ─────────────────────────────────────────────────────
-  const [cloudEmail,   setCloudEmail]   = useState('');
-  const [cloudUser,    setCloudUser]    = useState<string | null>(null);
-  const [cloudStatus,  setCloudStatus]  = useState('');
+  const [cloudEmail, setCloudEmail] = useState('');
+  const [cloudUser, setCloudUser] = useState<string | null>(null);
+  const [cloudStatus, setCloudStatus] = useState('');
   const [cloudLoading, setCloudLoading] = useState(false);
-
-  // ── Import state ─────────────────────────────────────────────────────────
   const [importMsg, setImportMsg] = useState('');
 
-  // ── Supabase actions ─────────────────────────────────────────────────────
   const handleCloudSignIn = async () => {
     setCloudLoading(true);
     const res = await signInWithEmail(cloudEmail);
@@ -148,7 +122,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ── Export / Import ──────────────────────────────────────────────────────
   const handleExport = () => {
     downloadStateJSON(useStore.getState() as unknown as Record<string, unknown>);
     toast.success('State exported as JSON');
@@ -163,18 +136,22 @@ export default function SettingsPage() {
       }
       if (result.data) {
         useStore.setState(result.data as Partial<ReturnType<typeof useStore.getState>>);
-        setImportMsg(`✓ Imported ${result.keysFound} setting groups from ${result.exportedAt ?? 'file'}`);
+        setImportMsg(
+          `✓ Imported ${result.keysFound} setting groups from ${result.exportedAt ?? 'file'}`
+        );
         toast.success('Settings imported successfully');
       }
       setTimeout(() => setImportMsg(''), 6000);
     });
   };
 
-  // ── Reset ────────────────────────────────────────────────────────────────
   const handleResetAll = () => {
-    if (!confirm(
-      'Reset ALL app data? This clears your trades journal, strategies, drawings, paper account, and settings. This cannot be undone.'
-    )) return;
+    if (
+      !confirm(
+        'Reset ALL app data? This clears your trades journal, strategies, drawings, paper account, and settings. This cannot be undone.'
+      )
+    )
+      return;
     localStorage.clear();
     indexedDB.deleteDatabase('tradeassist');
     toast.warn('All data cleared — reloading…');
@@ -191,67 +168,76 @@ export default function SettingsPage() {
     toast.success('Indicator params reset to defaults');
   };
 
-  const TIMEFRAMES = ['1m','5m','15m','1h','4h','1d'];
+  const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '4px 0 40px' }}>
-
-      {/* ── Theme ─────────────────────────────────────────────────────────── */}
+    <div className="max-w-[620px] mx-auto py-1 pb-10">
       <Section title="Appearance">
         <Row label="Theme" hint="Toggle between dark and light mode">
-          <button
-            onClick={toggleTheme}
-            style={{ ...neutralBtn, display: 'flex', alignItems: 'center', gap: 6 }}
-          >
+          <ActionBtn onClick={toggleTheme} className="flex items-center gap-1.5">
             {theme === 'dark' ? '☀ Switch to Light' : '☾ Switch to Dark'}
-          </button>
+          </ActionBtn>
         </Row>
       </Section>
 
-      {/* ── Defaults ──────────────────────────────────────────────────────── */}
       <Section title="Default Values">
         <Row label="Default Symbol" hint="Symbol loaded on startup">
           <input
-            style={inp}
+            className={inp}
             value={store.defaultSym}
-            onChange={e => store.setSettings({ defaultSym: e.target.value.toUpperCase() })}
+            onChange={(e) => store.setSettings({ defaultSym: e.target.value.toUpperCase() })}
           />
         </Row>
         <Row label="Default Timeframe">
           <select
-            style={{ ...inp, width: 90 }}
+            className={inpNarrow}
             value={store.defaultTf}
-            onChange={e => store.setSettings({ defaultTf: e.target.value })}
+            onChange={(e) => store.setSettings({ defaultTf: e.target.value })}
           >
-            {TIMEFRAMES.map(t => <option key={t} value={t}>{t}</option>)}
+            {TIMEFRAMES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
         </Row>
         <Row label="Default Capital ($)">
           <input
-            type="number" min={1} style={inp}
+            type="number"
+            min={1}
+            className={inp}
             value={store.defaultCapital}
-            onChange={e => store.setSettings({ defaultCapital: +e.target.value || 200 })}
+            onChange={(e) => store.setSettings({ defaultCapital: +e.target.value || 200 })}
           />
         </Row>
         <Row label="Default Leverage">
           <input
-            type="number" min={1} max={125} style={inp}
+            type="number"
+            min={1}
+            max={125}
+            className={inp}
             value={store.defaultLeverage}
-            onChange={e => store.setSettings({ defaultLeverage: +e.target.value || 10 })}
+            onChange={(e) => store.setSettings({ defaultLeverage: +e.target.value || 10 })}
           />
         </Row>
         <Row label="Default R:R Ratio">
           <input
-            type="number" min={0.5} max={20} step={0.1} style={inp}
+            type="number"
+            min={0.5}
+            max={20}
+            step={0.1}
+            className={inp}
             value={store.defaultRR}
-            onChange={e => store.setSettings({ defaultRR: +e.target.value || 2 })}
+            onChange={(e) => store.setSettings({ defaultRR: +e.target.value || 2 })}
           />
         </Row>
         <Row label="Default Fee Type">
           <select
-            style={{ ...inp, width: 90 }}
+            className={inpNarrow}
             value={store.defaultFeeType}
-            onChange={e => store.setSettings({ defaultFeeType: e.target.value as 'maker'|'taker' })}
+            onChange={(e) =>
+              store.setSettings({ defaultFeeType: e.target.value as 'maker' | 'taker' })
+            }
           >
             <option value="maker">Maker (0.02%)</option>
             <option value="taker">Taker (0.05%)</option>
@@ -259,12 +245,11 @@ export default function SettingsPage() {
         </Row>
       </Section>
 
-      {/* ── Audio & Notifications ─────────────────────────────────────────── */}
       <Section title="Alerts & Notifications">
         <Row label="Alert sounds" hint="Plays beep on price alerts and EMA crossovers">
           <Toggle
             on={store.soundEnabled}
-            onChange={v => {
+            onChange={(v) => {
               store.setSoundEnabled(v);
               toast.info(`Sound ${v ? 'enabled' : 'disabled'}`);
             }}
@@ -274,7 +259,11 @@ export default function SettingsPage() {
           <Toggle
             on={store.notifEnabled}
             onChange={async (v) => {
-              if (v && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+              if (
+                v &&
+                typeof Notification !== 'undefined' &&
+                Notification.permission !== 'granted'
+              ) {
                 const perm = await Notification.requestPermission();
                 if (perm !== 'granted') {
                   toast.warn('Notification permission denied by browser');
@@ -288,122 +277,128 @@ export default function SettingsPage() {
         </Row>
       </Section>
 
-      {/* ── Data Import / Export ──────────────────────────────────────────── */}
       <Section title="Data — Import & Export">
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text3)', marginBottom: 12, lineHeight: 1.6 }}>
-          Export your entire state (journal, strategies, settings, drawings, paper account) as a single JSON file.
-          Import restores all of it on any device.
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          <button style={accentBtn} onClick={handleExport}>
+        <p className="text-10px font-mono text-text3 mb-3 leading-relaxed">
+          Export your entire state (journal, strategies, settings, drawings, paper account) as a
+          single JSON file. Import restores all of it on any device.
+        </p>
+        <div className="flex gap-2 flex-wrap mb-2">
+          <ActionBtn variant="green" onClick={handleExport}>
             ⬇ Export state.json
-          </button>
-          <button style={neutralBtn} onClick={handleImport}>
-            ⬆ Import state.json
-          </button>
+          </ActionBtn>
+          <ActionBtn onClick={handleImport}>⬆ Import state.json</ActionBtn>
         </div>
         {importMsg && (
-          <div style={{
-            fontSize: 10, fontFamily: 'var(--mono)',
-            color: importMsg.startsWith('✓') ? 'var(--green)' : 'var(--red)',
-            marginTop: 6,
-          }}>
+          <p
+            className={`text-10px font-mono mt-1.5 ${
+              importMsg.startsWith('✓') ? 'text-green' : 'text-red'
+            }`}
+          >
             {importMsg}
-          </div>
+          </p>
         )}
       </Section>
 
-      {/* ── Supabase Cloud Sync ───────────────────────────────────────────── */}
       {SUPABASE_ENABLED ? (
         <Section title="Cloud Sync (Supabase)">
           {!cloudUser ? (
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text3)', marginBottom: 10 }}>
+              <p className="text-10px font-mono text-text3 mb-2.5">
                 Sign in with your email to sync state across devices.
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              </p>
+              <div className="flex gap-1.5 mb-2">
                 <input
                   type="email"
                   placeholder="your@email.com"
                   value={cloudEmail}
-                  onChange={e => setCloudEmail(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleCloudSignIn(); }}
-                  style={{ ...inp, width: 200 }}
+                  onChange={(e) => setCloudEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCloudSignIn();
+                  }}
+                  className={inpWide}
                 />
-                <button
-                  style={accentBtn}
+                <ActionBtn
+                  variant="green"
                   onClick={handleCloudSignIn}
                   disabled={cloudLoading || !cloudEmail}
                 >
                   {cloudLoading ? 'Sending…' : 'Send Magic Link'}
-                </button>
+                </ActionBtn>
               </div>
               {cloudStatus && (
-                <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{cloudStatus}</div>
+                <p className="text-10px font-mono text-text2">{cloudStatus}</p>
               )}
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text2)', marginBottom: 10 }}>
+              <p className="text-10px font-mono text-text2 mb-2.5">
                 Signed in as <strong>{cloudUser}</strong>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button style={accentBtn} onClick={handleCloudPush} disabled={cloudLoading}>
+              </p>
+              <div className="flex gap-1.5 flex-wrap">
+                <ActionBtn variant="green" onClick={handleCloudPush} disabled={cloudLoading}>
                   ☁ Push to Cloud
-                </button>
-                <button style={neutralBtn} onClick={handleCloudPull} disabled={cloudLoading}>
+                </ActionBtn>
+                <ActionBtn onClick={handleCloudPull} disabled={cloudLoading}>
                   ☁ Pull from Cloud
-                </button>
-                <button style={dangerBtn} onClick={handleCloudSignOut}>
+                </ActionBtn>
+                <ActionBtn variant="red" onClick={handleCloudSignOut}>
                   Sign Out
-                </button>
+                </ActionBtn>
               </div>
               {cloudStatus && (
-                <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text2)', marginTop: 6 }}>{cloudStatus}</div>
+                <p className="text-10px font-mono text-text2 mt-1.5">{cloudStatus}</p>
               )}
             </div>
           )}
         </Section>
       ) : (
         <Section title="Cloud Sync (Supabase — not configured)">
-          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text3)', lineHeight: 1.7 }}>
-            To enable cloud sync:<br />
-            1. Create a project at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)' }}>supabase.com</a><br />
-            2. Add <code style={{ color: 'var(--amber)' }}>NEXT_PUBLIC_SUPABASE_URL</code> and <code style={{ color: 'var(--amber)' }}>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to .env.local<br />
-            3. Run: <code style={{ color: 'var(--accent)' }}>npm install @supabase/supabase-js</code><br />
+          <p className="text-10px font-mono text-text3 leading-relaxed">
+            To enable cloud sync:
+            <br />
+            1. Create a project at{' '}
+            <a
+              href="https://supabase.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue"
+            >
+              supabase.com
+            </a>
+            <br />
+            2. Add <code className="text-amber">NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+            <code className="text-amber">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to .env.local
+            <br />
+            3. Run: <code className="text-accent">npm install @supabase/supabase-js</code>
+            <br />
             See <code>app/lib/supabase.ts</code> for the SQL schema.
-          </div>
+          </p>
         </Section>
       )}
 
-      {/* ── Indicator Defaults ────────────────────────────────────────────── */}
       <Section title="Indicator Defaults">
         <Row label="Reset indicator params" hint="Restores all periods and multipliers to defaults">
-          <button style={neutralBtn} onClick={handleResetIndicators}>Reset Params</button>
+          <ActionBtn onClick={handleResetIndicators}>Reset Params</ActionBtn>
         </Row>
       </Section>
 
-      {/* ── Danger Zone ───────────────────────────────────────────────────── */}
       <Section title="Danger Zone">
         <Row label="Reset onboarding tour" hint="Tour will show again on next page load">
-          <button style={neutralBtn} onClick={handleResetOnboarding}>
-            Reset Tour
-          </button>
+          <ActionBtn onClick={handleResetOnboarding}>Reset Tour</ActionBtn>
         </Row>
         <Row
           label="Reset ALL data"
           hint="Clears journal, strategies, drawings, settings, paper account. Cannot be undone."
         >
-          <button style={dangerBtn} onClick={handleResetAll}>
+          <ActionBtn variant="red" onClick={handleResetAll}>
             ⚠ Reset Everything
-          </button>
+          </ActionBtn>
         </Row>
       </Section>
 
-      {/* ── About ─────────────────────────────────────────────────────────── */}
-      <div style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--text3)', textAlign: 'center' }}>
+      <p className="text-9px font-mono text-text3 text-center">
         TradeAssist · All data stored locally in your browser · No telemetry
-      </div>
+      </p>
     </div>
   );
 }

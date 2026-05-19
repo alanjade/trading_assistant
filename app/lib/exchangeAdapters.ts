@@ -12,17 +12,17 @@ export type ExchangeId = 'binance' | 'bybit' | 'okx';
 
 export const EXCHANGE_LABELS: Record<ExchangeId, string> = {
   binance: 'Binance',
-  bybit:   'Bybit',
-  okx:     'OKX',
+  bybit: 'Bybit',
+  okx: 'OKX',
 };
 
 // ── Adapter interface ─────────────────────────────────────────────────────────
 
 export interface ExchangeAdapter {
-  id:             ExchangeId;
-  label:          string;
+  id: ExchangeId;
+  label: string;
   /** Map app TF strings → exchange-specific interval strings */
-  intervalMap:    Record<string, string>;
+  intervalMap: Record<string, string>;
   /** Fetch OHLCV candles, always returned oldest-first */
   fetchCandles(sym: string, tf: string, limit?: number): Promise<Candle[]>;
   /** Fetch all actively-trading quote-asset pairs (returns normalized syms, e.g. BTCUSDT) */
@@ -40,42 +40,58 @@ export interface ExchangeAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const BinanceAdapter: ExchangeAdapter = {
-  id:    'binance',
+  id: 'binance',
   label: 'Binance',
 
   intervalMap: {
-    '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
-    '1h': '1h', '2h': '2h', '4h': '4h', '6h': '6h', '8h': '8h', '12h': '12h',
-    '1d': '1d', '3d': '3d', '1w': '1w', '1M': '1M',
+    '1m': '1m',
+    '3m': '3m',
+    '5m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+    '1h': '1h',
+    '2h': '2h',
+    '4h': '4h',
+    '6h': '6h',
+    '8h': '8h',
+    '12h': '12h',
+    '1d': '1d',
+    '3d': '3d',
+    '1w': '1w',
+    '1M': '1M',
   },
 
   displaySym(sym) {
     return sym.replace(/USDT$/, '').replace(/BUSD$/, '');
   },
 
-  toNative(sym) { return sym; },
-  fromNative(native) { return native; },
+  toNative(sym) {
+    return sym;
+  },
+  fromNative(native) {
+    return native;
+  },
 
   async fetchCandles(sym, tf, limit = 100) {
     const interval = this.intervalMap[tf] ?? tf;
     const url = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${interval}&limit=${limit}`;
-    const r   = await fetch(url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`Binance ${sym}: HTTP ${r.status}`);
-    const raw = await r.json() as string[][];
+    const raw = (await r.json()) as string[][];
     // Binance: oldest-first already
-    return raw.map(k => ({ o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5], t:+k[0] }));
+    return raw.map((k) => ({ o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5], t: +k[0] }));
   },
 
   async fetchAllPairs(quoteAsset = 'USDT') {
     const url = 'https://api.binance.com/api/v3/exchangeInfo';
-    const r   = await fetch(url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`Binance exchangeInfo: HTTP ${r.status}`);
-    const data = await r.json() as {
+    const data = (await r.json()) as {
       symbols: { symbol: string; status: string; quoteAsset: string }[];
     };
     return data.symbols
-      .filter(s => s.status === 'TRADING' && s.quoteAsset === quoteAsset)
-      .map(s => s.symbol);
+      .filter((s) => s.status === 'TRADING' && s.quoteAsset === quoteAsset)
+      .map((s) => s.symbol);
   },
 };
 
@@ -86,51 +102,65 @@ export const BinanceAdapter: ExchangeAdapter = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const BybitAdapter: ExchangeAdapter = {
-  id:    'bybit',
+  id: 'bybit',
   label: 'Bybit',
 
   intervalMap: {
-    '1m': '1', '3m': '3', '5m': '5', '15m': '15', '30m': '30',
-    '1h': '60', '2h': '120', '4h': '240', '6h': '360', '12h': '720',
-    '1d': 'D', '1w': 'W', '1M': 'M',
+    '1m': '1',
+    '3m': '3',
+    '5m': '5',
+    '15m': '15',
+    '30m': '30',
+    '1h': '60',
+    '2h': '120',
+    '4h': '240',
+    '6h': '360',
+    '12h': '720',
+    '1d': 'D',
+    '1w': 'W',
+    '1M': 'M',
   },
 
   displaySym(sym) {
     return sym.replace(/USDT$/, '');
   },
 
-  toNative(sym) { return sym; },            // Bybit spot also uses BTCUSDT
-  fromNative(native) { return native; },
+  toNative(sym) {
+    return sym;
+  }, // Bybit spot also uses BTCUSDT
+  fromNative(native) {
+    return native;
+  },
 
   async fetchCandles(sym, tf, limit = 100) {
     const interval = this.intervalMap[tf] ?? tf;
     // Bybit v5 spot kline — category=spot
     const url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${sym}&interval=${interval}&limit=${limit}`;
-    const r   = await fetch(url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`Bybit ${sym}: HTTP ${r.status}`);
-    const data = await r.json() as {
+    const data = (await r.json()) as {
       retCode: number;
-      result:  { list: string[][] };
+      result: { list: string[][] };
     };
     if (data.retCode !== 0) throw new Error(`Bybit ${sym}: retCode ${data.retCode}`);
     // Bybit returns newest-first → reverse to oldest-first
     const list = [...data.result.list].reverse();
     // [startTime, open, high, low, close, volume, turnover]
-    return list.map(k => ({ o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5], t:+k[0] }));
+    return list.map((k) => ({ o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5], t: +k[0] }));
   },
 
   async fetchAllPairs(quoteAsset = 'USDT') {
     const url = `https://api.bybit.com/v5/market/instruments-info?category=spot&status=Trading&limit=1000`;
-    const r   = await fetch(url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`Bybit instruments-info: HTTP ${r.status}`);
-    const data = await r.json() as {
+    const data = (await r.json()) as {
       retCode: number;
-      result:  { list: { symbol: string; quoteCoin: string; status: string }[] };
+      result: { list: { symbol: string; quoteCoin: string; status: string }[] };
     };
     if (data.retCode !== 0) throw new Error(`Bybit instruments: retCode ${data.retCode}`);
     return data.result.list
-      .filter(s => s.quoteCoin === quoteAsset && s.status === 'Trading')
-      .map(s => s.symbol);
+      .filter((s) => s.quoteCoin === quoteAsset && s.status === 'Trading')
+      .map((s) => s.symbol);
   },
 };
 
@@ -143,13 +173,23 @@ export const BybitAdapter: ExchangeAdapter = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const OKXAdapter: ExchangeAdapter = {
-  id:    'okx',
+  id: 'okx',
   label: 'OKX',
 
   intervalMap: {
-    '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
-    '1h': '1H', '2h': '2H', '4h': '4H', '6h': '6H', '12h': '12H',
-    '1d': '1D', '1w': '1W', '1M': '1M',
+    '1m': '1m',
+    '3m': '3m',
+    '5m': '5m',
+    '15m': '15m',
+    '30m': '30m',
+    '1h': '1H',
+    '2h': '2H',
+    '4h': '4H',
+    '6h': '6H',
+    '12h': '12H',
+    '1d': '1D',
+    '1w': '1W',
+    '1M': '1M',
   },
 
   displaySym(sym) {
@@ -169,12 +209,12 @@ export const OKXAdapter: ExchangeAdapter = {
   },
 
   async fetchCandles(sym, tf, limit = 100) {
-    const instId   = this.toNative(sym);
-    const bar      = this.intervalMap[tf] ?? tf;
-    const url      = `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`;
-    const r        = await fetch(url);
+    const instId = this.toNative(sym);
+    const bar = this.intervalMap[tf] ?? tf;
+    const url = `https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`;
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`OKX ${sym}: HTTP ${r.status}`);
-    const data = await r.json() as {
+    const data = (await r.json()) as {
       code: string;
       data: string[][];
     };
@@ -182,21 +222,21 @@ export const OKXAdapter: ExchangeAdapter = {
     // OKX returns newest-first → reverse to oldest-first
     const list = [...data.data].reverse();
     // [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm]
-    return list.map(k => ({ o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5], t:+k[0] }));
+    return list.map((k) => ({ o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5], t: +k[0] }));
   },
 
   async fetchAllPairs(quoteAsset = 'USDT') {
     const url = `https://www.okx.com/api/v5/public/instruments?instType=SPOT`;
-    const r   = await fetch(url);
+    const r = await fetch(url);
     if (!r.ok) throw new Error(`OKX instruments: HTTP ${r.status}`);
-    const data = await r.json() as {
+    const data = (await r.json()) as {
       code: string;
       data: { instId: string; quoteCcy: string; state: string }[];
     };
     if (data.code !== '0') throw new Error(`OKX instruments: code ${data.code}`);
     return data.data
-      .filter(s => s.quoteCcy === quoteAsset && s.state === 'live')
-      .map(s => this.fromNative(s.instId));
+      .filter((s) => s.quoteCcy === quoteAsset && s.state === 'live')
+      .map((s) => this.fromNative(s.instId));
   },
 };
 
@@ -206,8 +246,8 @@ export const OKXAdapter: ExchangeAdapter = {
 
 export const EXCHANGE_ADAPTERS: Record<ExchangeId, ExchangeAdapter> = {
   binance: BinanceAdapter,
-  bybit:   BybitAdapter,
-  okx:     OKXAdapter,
+  bybit: BybitAdapter,
+  okx: OKXAdapter,
 };
 
 export function getAdapter(id: ExchangeId): ExchangeAdapter {
@@ -219,4 +259,4 @@ export function getAdapter(id: ExchangeId): ExchangeAdapter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TF_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'] as const;
-export type TfOption = typeof TF_OPTIONS[number];
+export type TfOption = (typeof TF_OPTIONS)[number];

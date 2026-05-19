@@ -1,22 +1,20 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 export type ToastType = 'success' | 'warn' | 'error' | 'info';
 
 export interface Toast {
-  id:       string;
-  type:     ToastType;
-  message:  string;
-  duration: number;   // ms
+  id: string;
+  type: ToastType;
+  message: string;
+  duration: number;
 }
 
-// ── Toast store (standalone, not merged into main store) ──────────────────────
 interface ToastState {
   toasts: Toast[];
-  push:   (type: ToastType, message: string, duration?: number) => void;
+  push: (type: ToastType, message: string, duration?: number) => void;
   remove: (id: string) => void;
 }
 
@@ -24,46 +22,62 @@ export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   push: (type, message, duration = 3500) => {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-    set(s => ({ toasts: [...s.toasts.slice(-4), { id, type, message, duration }] }));
+    set((s) => ({ toasts: [...s.toasts.slice(-4), { id, type, message, duration }] }));
   },
-  remove: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
+  remove: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
 
-// ── Convenience helpers (call anywhere) ───────────────────────────────────────
 export const toast = {
   success: (msg: string, ms?: number) => useToastStore.getState().push('success', msg, ms),
-  warn:    (msg: string, ms?: number) => useToastStore.getState().push('warn',    msg, ms),
-  error:   (msg: string, ms?: number) => useToastStore.getState().push('error',   msg, ms),
-  info:    (msg: string, ms?: number) => useToastStore.getState().push('info',    msg, ms),
+  warn: (msg: string, ms?: number) => useToastStore.getState().push('warn', msg, ms),
+  error: (msg: string, ms?: number) => useToastStore.getState().push('error', msg, ms),
+  info: (msg: string, ms?: number) => useToastStore.getState().push('info', msg, ms),
 };
 
-// ── Colours ───────────────────────────────────────────────────────────────────
-const TYPE_CONFIG: Record<ToastType, { icon: string; color: string; bar: string; bg: string }> = {
-  success: { icon: '✓', color: 'var(--green)', bar: 'var(--green)',  bg: 'rgba(0,229,160,0.08)' },
-  warn:    { icon: '⚠', color: 'var(--amber)', bar: 'var(--amber)',  bg: 'rgba(255,184,46,0.08)' },
-  error:   { icon: '✕', color: 'var(--red)',   bar: 'var(--red)',    bg: 'rgba(255,61,90,0.08)'  },
-  info:    { icon: 'ℹ', color: 'var(--blue)',  bar: 'var(--blue)',   bg: 'rgba(77,166,255,0.08)' },
+const TYPE_ICON: Record<ToastType, string> = {
+  success: '✓',
+  warn: '⚠',
+  error: '✕',
+  info: 'ℹ',
 };
 
-// ── Single Toast item ─────────────────────────────────────────────────────────
+const TYPE_CLASSES: Record<ToastType, { container: string; icon: string; bar: string }> = {
+  success: {
+    container: 'bg-green-bg border-green/20 border-l-green',
+    icon: 'text-green',
+    bar: 'bg-green',
+  },
+  warn: {
+    container: 'bg-amber/10 border-amber/20 border-l-amber',
+    icon: 'text-amber',
+    bar: 'bg-amber',
+  },
+  error: {
+    container: 'bg-red-bg border-red/20 border-l-red',
+    icon: 'text-red',
+    bar: 'bg-red',
+  },
+  info: {
+    container: 'bg-blue/10 border-blue/20 border-l-blue',
+    icon: 'text-blue',
+    bar: 'bg-blue',
+  },
+};
+
 function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void }) {
-  const cfg      = TYPE_CONFIG[t.type];
-  const barRef   = useRef<HTMLDivElement>(null);
-  const startRef = useRef(Date.now());
+  const cls = TYPE_CLASSES[t.type];
+  const barRef = useRef<HTMLDivElement>(null);
 
-  // Animate the progress bar
   useEffect(() => {
     const bar = barRef.current;
     if (!bar) return;
     bar.style.transition = 'none';
-    bar.style.width      = '100%';
-    // Force reflow so the transition picks up
+    bar.style.width = '100%';
     void bar.offsetWidth;
     bar.style.transition = `width ${t.duration}ms linear`;
-    bar.style.width      = '0%';
+    bar.style.width = '0%';
   }, [t.duration]);
 
-  // Auto-remove
   useEffect(() => {
     const timer = setTimeout(onRemove, t.duration);
     return () => clearTimeout(timer);
@@ -71,97 +85,37 @@ function ToastItem({ toast: t, onRemove }: { toast: Toast; onRemove: () => void 
 
   return (
     <div
-      style={{
-        position:     'relative',
-        display:      'flex',
-        alignItems:   'flex-start',
-        gap:          10,
-        padding:      '10px 14px',
-        paddingRight: 36,
-        background:   cfg.bg,
-        border:       `1px solid ${cfg.color}33`,
-        borderLeft:   `3px solid ${cfg.color}`,
-        borderRadius: 'var(--radius-sm)',
-        boxShadow:    '0 4px 24px rgba(0,0,0,0.4)',
-        minWidth:     260,
-        maxWidth:     360,
-        overflow:     'hidden',
-        animation:    'toastIn .2s cubic-bezier(.16,1,.3,1)',
-      }}
+      className={`relative flex items-start gap-2.5 py-2.5 pl-3.5 pr-9 border border-l-[3px] rounded-sm shadow-[0_4px_24px_rgba(0,0,0,0.4)] min-w-[260px] max-w-[360px] overflow-hidden animate-toast-in ${cls.container}`}
     >
-      {/* Icon */}
-      <span style={{
-        fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 700,
-        color: cfg.color, flexShrink: 0, marginTop: 1,
-      }}>
-        {cfg.icon}
+      <span className={`text-xs font-mono font-bold shrink-0 mt-px ${cls.icon}`}>
+        {TYPE_ICON[t.type]}
       </span>
-
-      {/* Message */}
-      <span style={{
-        fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text)',
-        lineHeight: 1.5, flex: 1,
-      }}>
-        {t.message}
-      </span>
-
-      {/* Close button */}
+      <span className="text-11px font-mono text-text leading-normal flex-1">{t.message}</span>
       <button
+        type="button"
         onClick={onRemove}
-        style={{
-          position:   'absolute', top: 6, right: 8,
-          fontSize:   12, lineHeight: 1,
-          background: 'none', border: 'none',
-          cursor:     'pointer', color: 'var(--text3)',
-          padding:    '2px 4px',
-        }}
-      >×</button>
-
-      {/* Progress bar */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0,
-        height: 2, background: 'var(--bg3)', width: '100%',
-      }}>
-        <div
-          ref={barRef}
-          style={{
-            height: '100%', background: cfg.bar,
-            width: '100%',
-          }}
-        />
+        className="absolute top-1.5 right-2 text-xs leading-none bg-transparent border-0 cursor-pointer text-text3 px-1 py-0.5"
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+      <div className="absolute bottom-0 left-0 h-0.5 w-full bg-bg3">
+        <div ref={barRef} className={`h-full w-full ${cls.bar}`} />
       </div>
     </div>
   );
 }
 
-// ── Toast container ───────────────────────────────────────────────────────────
 export default function ToastContainer() {
   const { toasts, remove } = useToastStore();
 
   return (
-    <>
-      <style>{`
-        @keyframes toastIn {
-          from { opacity: 0; transform: translateX(20px) scale(0.96); }
-          to   { opacity: 1; transform: translateX(0)    scale(1);    }
-        }
-      `}</style>
-      <div style={{
-        position:      'fixed',
-        bottom:        20,
-        right:         20,
-        zIndex:        9999,
-        display:       'flex',
-        flexDirection: 'column',
-        gap:           8,
-        pointerEvents: 'none',
-      }}>
-        {toasts.map(t => (
-          <div key={t.id} style={{ pointerEvents: 'all' }}>
-            <ToastItem toast={t} onRemove={() => remove(t.id)} />
-          </div>
-        ))}
-      </div>
-    </>
+    <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div key={t.id} className="pointer-events-auto">
+          <ToastItem toast={t} onRemove={() => remove(t.id)} />
+        </div>
+      ))}
+    </div>
   );
 }

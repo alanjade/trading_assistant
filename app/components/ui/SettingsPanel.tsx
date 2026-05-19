@@ -1,105 +1,107 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useStore } from '@/lib/store';
-import { Card, ActionBtn, SectionTitle } from '@/components/ui';
+import {
+  ActionBtn,
+  Card,
+  SectionTitle,
+  SegmentBtn,
+  SettingsGroup,
+  SettingsRow,
+  ToggleSwitch,
+  settingsInputClass,
+} from '@/components/ui';
 import { toast } from '@/components/ui/Toast';
+import { useStore } from '@/lib/store';
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{children}</div>
-    </div>
-  );
-}
+const fileBtnClass =
+  'inline-block px-3.5 py-1.5 text-11px font-mono font-semibold rounded-sm cursor-pointer border border-border2 bg-bg3 text-text2 transition-colors hover:text-text';
 
-function Toggle({ on, onToggle, label }: { on: boolean; onToggle: () => void; label?: string }) {
-  return (
-    <button
-      onClick={onToggle}
-      title={label}
-      style={{
-        width: 40, height: 22, borderRadius: 11, cursor: 'pointer', border: 'none',
-        background: on ? 'var(--green)' : 'var(--bg4)',
-        position: 'relative', transition: 'background .2s', flexShrink: 0,
-      }}
-    >
-      <span style={{
-        display: 'block', width: 16, height: 16, borderRadius: '50%', background: '#fff',
-        position: 'absolute', top: 3, transition: 'left .2s',
-        left: on ? 21 : 3,
-      }} />
-    </button>
-  );
-}
-
-function NumRow({ label, value, onChange, min, max, step }: {
-  label: string; value: number;
+function NumRow({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+}: {
+  label: string;
+  value: number;
   onChange: (v: number) => void;
-  min?: number; max?: number; step?: number;
+  min?: number;
+  max?: number;
+  step?: number;
 }) {
   return (
-    <Row label={label}>
+    <SettingsRow label={label}>
       <input
-        type="number" value={value} min={min} max={max} step={step ?? 1}
-        onChange={e => onChange(parseFloat(e.target.value) || 0)}
-        style={{ width: 80, padding: '4px 8px', fontSize: 12, fontFamily: 'var(--mono)', background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border2)', borderRadius: 'var(--radius-sm)', outline: 'none', textAlign: 'right' }}
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step ?? 1}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        className={`${settingsInputClass} w-20 text-right`}
       />
-    </Row>
+    </SettingsRow>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 export default function SettingsPanel() {
   const store = useStore();
   const {
-    theme, setSettings,
-    defaultSym, defaultTf, defaultLeverage, defaultFeeType, defaultCapital, defaultRR,
-    soundEnabled, setSoundEnabled, notifEnabled, setNotifEnabled,
+    theme,
+    setSettings,
+    defaultSym,
+    defaultTf,
+    defaultLeverage,
+    defaultFeeType,
+    defaultCapital,
+    defaultRR,
+    soundEnabled,
+    setSoundEnabled,
+    notifEnabled,
+    setNotifEnabled,
     resetPaperAccount,
-    exportTradesCsv, importTradesCsv,
+    exportTradesCsv,
+    importTradesCsv,
     trades,
   } = store;
 
-  const csvRef  = useRef<HTMLInputElement>(null);
+  const csvRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [confirmReset, setConfirmReset] = useState(false);
 
-  // ── Export full app state ─────────────────────────────────────────────────
   const handleExportState = () => {
     const state = useStore.getState();
     const exportable = {
-      trades:           state.trades,
-      strategies:       state.strategies,
+      trades: state.trades,
+      strategies: state.strategies,
       activeStrategyId: state.activeStrategyId,
-      chartDrawings:    state.chartDrawings,
-      priceAlerts:      state.priceAlerts,
-      paperAccount:     { ...state.paperAccount, openPositions: [] },
+      chartDrawings: state.chartDrawings,
+      priceAlerts: state.priceAlerts,
+      paperAccount: { ...state.paperAccount, openPositions: [] },
       settings: {
-        theme:            state.theme,
-        defaultSym:       state.defaultSym,
-        defaultTf:        state.defaultTf,
-        defaultLeverage:  state.defaultLeverage,
-        defaultFeeType:   state.defaultFeeType,
-        defaultCapital:   state.defaultCapital,
-        defaultRR:        state.defaultRR,
+        theme: state.theme,
+        defaultSym: state.defaultSym,
+        defaultTf: state.defaultTf,
+        defaultLeverage: state.defaultLeverage,
+        defaultFeeType: state.defaultFeeType,
+        defaultCapital: state.defaultCapital,
+        defaultRR: state.defaultRR,
         activeIndicators: state.activeIndicators,
-        indicatorParams:  state.indicatorParams,
-        atrTrailMult:     state.atrTrailMult,
-        soundEnabled:     state.soundEnabled,
-        notifEnabled:     state.notifEnabled,
-        // maxDailyLossUsd is exported alongside settings for round-trip fidelity
-        // but must be restored via setMaxDailyLossUsd() on import (ChartSlice field)
-        maxDailyLossUsd:  state.maxDailyLossUsd,
-        rrRatio:          state.rrRatio,
-        leverage:         state.leverage,
-        feeType:          state.feeType,
-        capital:          state.capital,
-        margin:           state.margin,
-        goalPct:          state.goalPct,
+        indicatorParams: state.indicatorParams,
+        atrTrailMult: state.atrTrailMult,
+        soundEnabled: state.soundEnabled,
+        notifEnabled: state.notifEnabled,
+        maxDailyLossUsd: state.maxDailyLossUsd,
+        rrRatio: state.rrRatio,
+        leverage: state.leverage,
+        feeType: state.feeType,
+        capital: state.capital,
+        margin: state.margin,
+        goalPct: state.goalPct,
       },
     };
     const blob = new Blob([JSON.stringify(exportable, null, 2)], { type: 'application/json' });
@@ -110,7 +112,6 @@ export default function SettingsPanel() {
     toast.success('App state exported');
   };
 
-  // ── Import full app state ─────────────────────────────────────────────────
   const handleImportState = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -120,35 +121,34 @@ export default function SettingsPanel() {
         const data = JSON.parse(ev.target?.result as string);
         const s = data.settings ?? {};
 
-        // Apply SettingsSlice fields — maxDailyLossUsd deliberately excluded here
-        // because it lives in ChartSlice, not SettingsSlice.
         useStore.getState().setSettings({
-          theme:            s.theme,
-          defaultSym:       s.defaultSym,
-          defaultTf:        s.defaultTf,
-          defaultLeverage:  s.defaultLeverage,
-          defaultFeeType:   s.defaultFeeType,
-          defaultCapital:   s.defaultCapital,
-          defaultRR:        s.defaultRR,
+          theme: s.theme,
+          defaultSym: s.defaultSym,
+          defaultTf: s.defaultTf,
+          defaultLeverage: s.defaultLeverage,
+          defaultFeeType: s.defaultFeeType,
+          defaultCapital: s.defaultCapital,
+          defaultRR: s.defaultRR,
           activeIndicators: s.activeIndicators,
-          indicatorParams:  s.indicatorParams,
-          atrTrailMult:     s.atrTrailMult,
-          soundEnabled:     s.soundEnabled,
-          notifEnabled:     s.notifEnabled,
-          // ↑ DO NOT add maxDailyLossUsd here — it is a ChartSlice field
+          indicatorParams: s.indicatorParams,
+          atrTrailMult: s.atrTrailMult,
+          soundEnabled: s.soundEnabled,
+          notifEnabled: s.notifEnabled,
         });
 
-        // maxDailyLossUsd is in ChartSlice → use its dedicated action
         if (typeof s.maxDailyLossUsd === 'number') {
           useStore.getState().setMaxDailyLossUsd(s.maxDailyLossUsd);
         }
 
-        // Restore remaining slices
-        if (data.trades)        useStore.setState({ trades: data.trades });
-        if (data.strategies)    useStore.setState({ strategies: data.strategies, activeStrategyId: data.activeStrategyId ?? null });
+        if (data.trades) useStore.setState({ trades: data.trades });
+        if (data.strategies)
+          useStore.setState({
+            strategies: data.strategies,
+            activeStrategyId: data.activeStrategyId ?? null,
+          });
         if (data.chartDrawings) useStore.setState({ chartDrawings: data.chartDrawings });
-        if (data.priceAlerts)   useStore.setState({ priceAlerts: data.priceAlerts });
-        if (data.paperAccount)  useStore.setState({ paperAccount: data.paperAccount });
+        if (data.priceAlerts) useStore.setState({ priceAlerts: data.priceAlerts });
+        if (data.paperAccount) useStore.setState({ paperAccount: data.paperAccount });
 
         toast.success('App state imported');
       } catch {
@@ -159,7 +159,6 @@ export default function SettingsPanel() {
     reader.readAsText(file);
   };
 
-  // ── CSV import ────────────────────────────────────────────────────────────
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -173,15 +172,16 @@ export default function SettingsPanel() {
     reader.readAsText(file);
   };
 
-  // ── Onboarding reset ──────────────────────────────────────────────────────
   const resetOnboarding = () => {
     localStorage.removeItem('onboarding_done');
     window.location.reload();
   };
 
-  // ── Full data wipe ────────────────────────────────────────────────────────
   const handleResetAll = () => {
-    if (!confirmReset) { setConfirmReset(true); return; }
+    if (!confirmReset) {
+      setConfirmReset(true);
+      return;
+    }
     localStorage.clear();
     window.location.reload();
   };
@@ -192,175 +192,206 @@ export default function SettingsPanel() {
     <Card>
       <SectionTitle>⚙ Settings</SectionTitle>
 
-      {/* ── Appearance ─────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Appearance</div>
-
-        <Row label="Theme">
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['dark', 'light'] as const).map(t => (
-              <button key={t} onClick={() => setSettings({ theme: t })} style={{
-                padding: '4px 12px', fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 600,
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                border: `1px solid ${theme === t ? 'var(--accent)' : 'var(--border2)'}`,
-                background: theme === t ? 'rgba(0,229,160,0.1)' : 'var(--bg3)',
-                color: theme === t ? 'var(--accent)' : 'var(--text2)', transition: 'all .15s',
-              }}>{t === 'dark' ? '🌙 Dark' : '☀ Light'}</button>
+      <SettingsGroup title="Appearance">
+        <SettingsRow label="Theme">
+          <div className="flex gap-1">
+            {(['dark', 'light'] as const).map((t) => (
+              <SegmentBtn
+                key={t}
+                active={theme === t}
+                onClick={() => setSettings({ theme: t })}
+              >
+                {t === 'dark' ? '🌙 Dark' : '☀ Light'}
+              </SegmentBtn>
             ))}
           </div>
-        </Row>
-      </div>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* ── Defaults ───────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Defaults</div>
-
-        <Row label="Default Symbol">
+      <SettingsGroup title="Defaults">
+        <SettingsRow label="Default Symbol">
           <input
-            value={defaultSym} onChange={e => setSettings({ defaultSym: e.target.value.toUpperCase() })}
-            style={{ width: 110, padding: '4px 8px', fontSize: 11, fontFamily: 'var(--mono)', background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border2)', borderRadius: 'var(--radius-sm)', outline: 'none' }}
+            value={defaultSym}
+            onChange={(e) => setSettings({ defaultSym: e.target.value.toUpperCase() })}
+            className={`${settingsInputClass} w-[110px]`}
           />
-        </Row>
+        </SettingsRow>
 
-        <Row label="Default Timeframe">
-          <div style={{ display: 'flex', gap: 3 }}>
-            {TIMEFRAMES.map(t => (
-              <button key={t} onClick={() => setSettings({ defaultTf: t })} style={{
-                padding: '3px 8px', fontSize: 10, fontFamily: 'var(--mono)',
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                border: `1px solid ${defaultTf === t ? 'var(--accent)' : 'var(--border2)'}`,
-                background: defaultTf === t ? 'rgba(0,229,160,0.1)' : 'transparent',
-                color: defaultTf === t ? 'var(--accent)' : 'var(--text2)', transition: 'all .15s',
-              }}>{t}</button>
+        <SettingsRow label="Default Timeframe">
+          <div className="flex gap-0.5">
+            {TIMEFRAMES.map((t) => (
+              <SegmentBtn
+                key={t}
+                active={defaultTf === t}
+                onClick={() => setSettings({ defaultTf: t })}
+                className="px-2 py-0.5"
+              >
+                {t}
+              </SegmentBtn>
             ))}
           </div>
-        </Row>
+        </SettingsRow>
 
-        <NumRow label="Default Leverage"     value={defaultLeverage} onChange={v => setSettings({ defaultLeverage: v })} min={1} max={125} />
-        <NumRow label="Default Capital ($)"  value={defaultCapital}  onChange={v => setSettings({ defaultCapital: v })}  min={1} step={10} />
-        <NumRow label="Default R:R Ratio"    value={defaultRR}       onChange={v => setSettings({ defaultRR: v })}       min={0.5} max={10} step={0.5} />
+        <NumRow
+          label="Default Leverage"
+          value={defaultLeverage}
+          onChange={(v) => setSettings({ defaultLeverage: v })}
+          min={1}
+          max={125}
+        />
+        <NumRow
+          label="Default Capital ($)"
+          value={defaultCapital}
+          onChange={(v) => setSettings({ defaultCapital: v })}
+          min={1}
+          step={10}
+        />
+        <NumRow
+          label="Default R:R Ratio"
+          value={defaultRR}
+          onChange={(v) => setSettings({ defaultRR: v })}
+          min={0.5}
+          max={10}
+          step={0.5}
+        />
 
-        <Row label="Default Fee Type">
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['maker', 'taker'] as const).map(f => (
-              <button key={f} onClick={() => setSettings({ defaultFeeType: f })} style={{
-                padding: '3px 10px', fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 600,
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                border: `1px solid ${defaultFeeType === f ? 'var(--amber)' : 'var(--border2)'}`,
-                background: defaultFeeType === f ? 'rgba(255,184,46,0.1)' : 'transparent',
-                color: defaultFeeType === f ? 'var(--amber)' : 'var(--text2)', transition: 'all .15s',
-              }}>{f}</button>
+        <SettingsRow label="Default Fee Type">
+          <div className="flex gap-1">
+            {(['maker', 'taker'] as const).map((f) => (
+              <SegmentBtn
+                key={f}
+                variant="amber"
+                active={defaultFeeType === f}
+                onClick={() => setSettings({ defaultFeeType: f })}
+              >
+                {f}
+              </SegmentBtn>
             ))}
           </div>
-        </Row>
-      </div>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* ── Alerts & Sounds ────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Alerts & Sound</div>
+      <SettingsGroup title="Alerts & Sound">
+        <SettingsRow label="Alert Sounds">
+          <ToggleSwitch on={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
+        </SettingsRow>
+        <SettingsRow label="Browser Notifications">
+          <ToggleSwitch
+            on={notifEnabled}
+            onToggle={() => {
+              if (!notifEnabled && Notification.permission !== 'granted') {
+                Notification.requestPermission().then((p) => {
+                  if (p === 'granted') setNotifEnabled(true);
+                });
+              } else {
+                setNotifEnabled(!notifEnabled);
+              }
+            }}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
-        <Row label="Alert Sounds">
-          <Toggle on={soundEnabled} onToggle={() => setSoundEnabled(!soundEnabled)} />
-        </Row>
-        <Row label="Browser Notifications">
-          <Toggle on={notifEnabled} onToggle={() => {
-            if (!notifEnabled && Notification.permission !== 'granted') {
-              Notification.requestPermission().then(p => { if (p === 'granted') setNotifEnabled(true); });
-            } else {
-              setNotifEnabled(!notifEnabled);
-            }
-          }} />
-        </Row>
-      </div>
-
-      {/* ── Paper account ──────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Paper Trading</div>
-        <Row label="Reset Paper Account">
-          <ActionBtn variant="red" onClick={() => { resetPaperAccount(10000); toast.info('Paper account reset'); }}>
+      <SettingsGroup title="Paper Trading">
+        <SettingsRow label="Reset Paper Account">
+          <ActionBtn
+            variant="red"
+            onClick={() => {
+              resetPaperAccount(10000);
+              toast.info('Paper account reset');
+            }}
+          >
             Reset to $10,000
           </ActionBtn>
-        </Row>
-      </div>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* ── Data ─────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Data</div>
-
-        <Row label="App State Backup">
-          <div style={{ display: 'flex', gap: 6 }}>
-            <ActionBtn variant="green" onClick={handleExportState}>⬇ Export JSON</ActionBtn>
-            <label style={{ cursor: 'pointer' }}>
-              <input ref={jsonRef} type="file" accept=".json" onChange={handleImportState} style={{ display: 'none' }} />
-              <span onClick={() => jsonRef.current?.click()} style={{
-                display: 'inline-block', padding: '7px 14px', fontSize: 11, fontFamily: 'var(--mono)', fontWeight: 600,
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                border: '1px solid var(--border2)', background: 'var(--bg3)', color: 'var(--text2)', transition: 'all .15s',
-              }}>⬆ Import JSON</span>
+      <SettingsGroup title="Data">
+        <SettingsRow label="App State Backup">
+          <div className="flex gap-1.5">
+            <ActionBtn variant="green" onClick={handleExportState}>
+              ⬇ Export JSON
+            </ActionBtn>
+            <label className="cursor-pointer">
+              <input
+                ref={jsonRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportState}
+                className="hidden"
+              />
+              <span onClick={() => jsonRef.current?.click()} className={fileBtnClass}>
+                ⬆ Import JSON
+              </span>
             </label>
           </div>
-        </Row>
+        </SettingsRow>
 
-        <Row label="Trade Journal CSV">
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <ActionBtn onClick={() => {
-              const csv = exportTradesCsv();
-              const a = document.createElement('a');
-              a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-              a.download = 'trades.csv';
-              a.click();
-              toast.success('Trades exported');
-            }}>
+        <SettingsRow label="Trade Journal CSV">
+          <div className="flex gap-1.5 flex-wrap items-center">
+            <ActionBtn
+              onClick={() => {
+                const csv = exportTradesCsv();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                a.download = 'trades.csv';
+                a.click();
+                toast.success('Trades exported');
+              }}
+            >
               ⬇ Export CSV
             </ActionBtn>
-            <div style={{ display: 'flex', gap: 3 }}>
-              {(['merge', 'replace'] as const).map(m => (
-                <button key={m} onClick={() => setImportMode(m)} style={{
-                  padding: '3px 9px', fontSize: 9, fontFamily: 'var(--mono)', fontWeight: 600,
-                  borderRadius: 4, cursor: 'pointer',
-                  border: `1px solid ${importMode === m ? 'var(--blue)' : 'var(--border2)'}`,
-                  background: importMode === m ? 'rgba(77,166,255,0.1)' : 'transparent',
-                  color: importMode === m ? 'var(--blue)' : 'var(--text3)',
-                }}>{m}</button>
+            <div className="flex gap-0.5">
+              {(['merge', 'replace'] as const).map((m) => (
+                <SegmentBtn
+                  key={m}
+                  variant="blue"
+                  active={importMode === m}
+                  onClick={() => setImportMode(m)}
+                  className="px-2 py-0.5 text-9px rounded"
+                >
+                  {m}
+                </SegmentBtn>
               ))}
             </div>
-            <label style={{ cursor: 'pointer' }}>
-              <input ref={csvRef} type="file" accept=".csv" onChange={handleImportCsv} style={{ display: 'none' }} />
-              <span onClick={() => csvRef.current?.click()} style={{
-                display: 'inline-block', padding: '7px 14px', fontSize: 11, fontFamily: 'var(--mono)', fontWeight: 600,
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                border: '1px solid var(--border2)', background: 'var(--bg3)', color: 'var(--text2)',
-              }}>⬆ Import CSV</span>
+            <label className="cursor-pointer">
+              <input
+                ref={csvRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImportCsv}
+                className="hidden"
+              />
+              <span onClick={() => csvRef.current?.click()} className={fileBtnClass}>
+                ⬆ Import CSV
+              </span>
             </label>
           </div>
-        </Row>
+        </SettingsRow>
 
-        <Row label={`Journal (${trades.length} trades)`}>
-          <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
-            {trades.filter(t => t.outcome === 'win').length}W / {trades.filter(t => t.outcome === 'loss').length}L
+        <SettingsRow label={`Journal (${trades.length} trades)`}>
+          <span className="text-11px font-mono text-text3">
+            {trades.filter((t) => t.outcome === 'win').length}W /{' '}
+            {trades.filter((t) => t.outcome === 'loss').length}L
           </span>
-        </Row>
-      </div>
+        </SettingsRow>
+      </SettingsGroup>
 
-      {/* ── Reset ─────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 4 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>Danger Zone</div>
-
-        <Row label="Onboarding">
+      <SettingsGroup title="Danger Zone" className="mb-1">
+        <SettingsRow label="Onboarding">
           <ActionBtn onClick={resetOnboarding}>↺ Show Onboarding Again</ActionBtn>
-        </Row>
-
-        <Row label="Reset All Data">
+        </SettingsRow>
+        <SettingsRow label="Reset All Data">
           <ActionBtn variant="red" onClick={handleResetAll}>
             {confirmReset ? '⚠ Click again to confirm' : '✕ Wipe All Data'}
           </ActionBtn>
-        </Row>
+        </SettingsRow>
         {confirmReset && (
-          <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--red)', marginTop: 6 }}>
-            This will clear all trades, strategies, settings, and chart drawings. Export a backup first.
-          </div>
+          <p className="text-10px font-mono text-red mt-1.5">
+            This will clear all trades, strategies, settings, and chart drawings. Export a backup
+            first.
+          </p>
         )}
-      </div>
+      </SettingsGroup>
     </Card>
   );
 }
