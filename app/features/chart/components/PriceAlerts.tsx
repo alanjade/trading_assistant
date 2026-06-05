@@ -1,16 +1,28 @@
 'use client';
 
+import { z } from 'zod';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import {
   ActionBtn,
   Card,
   FieldLabel,
   PanelHeader,
   pillToggleClass,
-  TextInput,
+  settingsInputClass,
 } from '@/components/ui';
 import { fmtPrice, fmtSymDisplay } from '@/lib/indicators';
 import { playAlertSound, useStore } from '@/lib/store';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const priceAlertSchema = z.object({
+  price: z.coerce.number().positive('Enter a positive alert price.'),
+  dir: z.enum(['above', 'below']),
+  label: z.string().trim().max(80, 'Keep labels under 80 characters.').optional(),
+});
+
+type PriceAlertFormInput = z.input<typeof priceAlertSchema>;
+type PriceAlertFormOutput = z.output<typeof priceAlertSchema>;
 
 export default function PriceAlerts() {
   const {
@@ -25,10 +37,20 @@ export default function PriceAlerts() {
     livePrice,
   } = useStore();
 
-  const [newPrice, setNewPrice] = useState('');
-  const [newDir, setNewDir] = useState<'above' | 'below'>('above');
-  const [newLabel, setNewLabel] = useState('');
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>('default');
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+    reset,
+    setValue,
+    watch,
+  } = useForm<PriceAlertFormInput, unknown, PriceAlertFormOutput>({
+    resolver: zodResolver(priceAlertSchema),
+    defaultValues: { price: undefined, dir: 'above', label: '' },
+    mode: 'onSubmit',
+  });
+  const newDir = watch('dir');
 
   useEffect(() => {
     if (typeof Notification !== 'undefined') {
@@ -46,17 +68,15 @@ export default function PriceAlerts() {
     }
   };
 
-  const handleAdd = () => {
-    const price = parseFloat(newPrice);
-    if (!price || price <= 0) return;
+  const handleAdd = (values: PriceAlertFormOutput) => {
+    const label = values.label?.trim();
     addPriceAlert({
       sym,
-      price,
-      dir: newDir,
-      label: newLabel || `${fmtSymDisplay(sym)} ${newDir} ${fmtPrice(price)}`,
+      price: values.price,
+      dir: values.dir,
+      label: label || `${fmtSymDisplay(sym)} ${values.dir} ${fmtPrice(values.price)}`,
     });
-    setNewPrice('');
-    setNewLabel('');
+    reset({ price: undefined, dir: values.dir, label: '' });
   };
 
   const testSound = () => playAlertSound('alert');
@@ -104,25 +124,36 @@ export default function PriceAlerts() {
         }
       />
 
-      <div className="flex gap-1.5 items-end mb-2.5 flex-wrap">
+      <form
+        className="flex gap-1.5 items-end mb-2.5 flex-wrap"
+        onSubmit={handleSubmit(handleAdd)}
+        aria-label="Create price alert"
+      >
         <div className="flex-1 min-w-[100px]">
-          <FieldLabel>Price</FieldLabel>
-          <TextInput
+          <FieldLabel htmlFor="price-alert-price">Price</FieldLabel>
+          <input
+            id="price-alert-price"
             type="number"
-            value={newPrice}
             placeholder={livePrice > 0 ? fmtPrice(livePrice) : '0.00'}
-            onChange={setNewPrice}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAdd();
-            }}
+            aria-invalid={errors.price ? 'true' : 'false'}
+            aria-describedby={errors.price ? 'price-alert-price-error' : undefined}
+            className={settingsInputClass}
+            {...register('price')}
           />
+          {errors.price && (
+            <p id="price-alert-price-error" className="mt-1 text-9px font-mono text-red">
+              {errors.price.message}
+            </p>
+          )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="radiogroup" aria-label="Alert direction">
           {(['above', 'below'] as const).map((d) => (
             <button
               key={d}
               type="button"
-              onClick={() => setNewDir(d)}
+              role="radio"
+              aria-checked={newDir === d}
+              onClick={() => setValue('dir', d, { shouldDirty: true })}
               className={`px-2.5 py-1.5 text-10px font-mono font-semibold rounded-sm cursor-pointer border transition-all ${
                 newDir === d
                   ? d === 'above'
@@ -136,13 +167,25 @@ export default function PriceAlerts() {
           ))}
         </div>
         <div className="flex-[2] min-w-[100px]">
-          <FieldLabel>Label (optional)</FieldLabel>
-          <TextInput value={newLabel} placeholder="e.g. Resistance level" onChange={setNewLabel} />
+          <FieldLabel htmlFor="price-alert-label">Label (optional)</FieldLabel>
+          <input
+            id="price-alert-label"
+            placeholder="e.g. Resistance level"
+            aria-invalid={errors.label ? 'true' : 'false'}
+            aria-describedby={errors.label ? 'price-alert-label-error' : undefined}
+            className={settingsInputClass}
+            {...register('label')}
+          />
+          {errors.label && (
+            <p id="price-alert-label-error" className="mt-1 text-9px font-mono text-red">
+              {errors.label.message}
+            </p>
+          )}
         </div>
-        <ActionBtn variant="green" onClick={handleAdd}>
+        <ActionBtn variant="green" type="submit">
           + Alert
         </ActionBtn>
-      </div>
+      </form>
 
       {livePrice > 0 && (
         <p className="text-9px font-mono text-text3 mb-2.5">

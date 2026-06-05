@@ -150,7 +150,7 @@ export default function IndicatorPanel({ onClose }: { onClose: () => void }) {
   const activeCount = Object.values(activeIndicators).filter(Boolean).length;
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-start justify-end">
+    <div className="fixed inset-0 z-500 flex items-start justify-end">
       <div
         className="absolute inset-0 bg-black/40"
         onClick={onClose}

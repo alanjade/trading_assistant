@@ -1,67 +1,70 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import { CHART_SECTION_LABELS } from '../constants';
 import type { ChartSection } from '../types';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { PanelSkeleton } from '@/components/ui';
+import CollapsiblePanel from '@/components/ui/CollapsiblePanel';
 import { useStore } from '@/lib/store';
 
-const ScreenerPanel = dynamic(
-  () => import('@/components/screener/ScreenerPanel'),
-  { ssr: false, loading: () => <div className="h-96 rounded-xl bg-bg3 animate-pulse" /> }
-);
-const FuturesCard = dynamic(
-  () => import('@/features/calculator/components/FuturesCard'),
-  { ssr: false, loading: () => <div className="h-[260px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const GoalCard = dynamic(
-  () => import('@/features/calculator/components/GoalCard'),
-  { ssr: false, loading: () => <div className="h-[160px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const RRCard = dynamic(
-  () => import('@/features/calculator/components/RRCard'),
-  { ssr: false, loading: () => <div className="h-[300px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const BacktestPanel = dynamic(
-  () => import('@/features/chart/components/BacktestPanel'),
-  { ssr: false, loading: () => <div className="h-[280px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const CandleChart = dynamic(
-  () => import('@/features/chart/components/CandleChart'),
-  { ssr: false, loading: () => <div className="h-[420px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const CrossoverLog = dynamic(
-  () => import('@/features/chart/components/CrossoverLog'),
-  { ssr: false, loading: () => <div className="h-[180px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const EntryZones = dynamic(
-  () => import('@/features/chart/components/EntryZones'),
-  { ssr: false, loading: () => <div className="h-[180px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const PaperTradingPanel = dynamic(
-  () => import('@/features/chart/components/PaperTradingPanel'),
-  { ssr: false, loading: () => <div className="h-[240px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const PriceAlerts = dynamic(
-  () => import('@/features/chart/components/PriceAlerts'),
-  { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const SessionPnL = dynamic(
-  () => import('@/features/chart/components/SessionPnL'),
-  { ssr: false, loading: () => <div className="h-[220px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const SuggestionCard = dynamic(
-  () => import('@/features/chart/components/SuggestionCard'),
-  { ssr: false, loading: () => <div className="h-[140px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const TradeLog = dynamic(
-  () => import('@/features/journal/components/TradeLog'),
-  { ssr: false, loading: () => <div className="h-[300px] rounded-xl bg-bg3 animate-pulse" /> }
-);
-const StrategyBuilder = dynamic(
-  () => import('@/features/strategy/components/StrategyBuilder'),
-  { ssr: false, loading: () => <div className="h-[300px] rounded-xl bg-bg3 animate-pulse" /> }
-);
+const ScreenerPanel = dynamic(() => import('@/components/screener/ScreenerPanel'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-96" />,
+});
+const FuturesCard = dynamic(() => import('@/features/calculator/components/FuturesCard'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[260px]" />,
+});
+const GoalCard = dynamic(() => import('@/features/calculator/components/GoalCard'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[160px]" />,
+});
+const RRCard = dynamic(() => import('@/features/calculator/components/RRCard'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[300px]" />,
+});
+const BacktestPanel = dynamic(() => import('@/features/chart/components/BacktestPanel'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[280px]" />,
+});
+const CandleChart = dynamic(() => import('@/features/chart/components/CandleChart'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[420px]" />,
+});
+const CrossoverLog = dynamic(() => import('@/features/chart/components/CrossoverLog'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[180px]" />,
+});
+const EntryZones = dynamic(() => import('@/features/chart/components/EntryZones'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[180px]" />,
+});
+const PaperTradingPanel = dynamic(() => import('@/features/chart/components/PaperTradingPanel'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[240px]" />,
+});
+const PriceAlerts = dynamic(() => import('@/features/chart/components/PriceAlerts'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[220px]" />,
+});
+const SessionPnL = dynamic(() => import('@/features/chart/components/SessionPnL'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[220px]" />,
+});
+const SuggestionCard = dynamic(() => import('@/features/chart/components/SuggestionCard'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-35" />,
+});
+const TradeLog = dynamic(() => import('@/features/journal/components/TradeLog'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[300px]" />,
+});
+const StrategyBuilder = dynamic(() => import('@/features/strategy/components/StrategyBuilder'), {
+  ssr: false,
+  loading: () => <PanelSkeleton className="h-[300px]" />,
+});
 
 function ChartContent() {
   const [chartSection, setChartSection] = useState<ChartSection>('analysis');
@@ -70,13 +73,13 @@ function ChartContent() {
     <div className="grid grid-cols-1 gap-2.5">
       <CandleChart />
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <div className="min-w-0" data-onboard="suggestion-card">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+        <CollapsiblePanel title="Signal" className="min-w-0" data-onboard="suggestion-card">
           <SuggestionCard />
-        </div>
-        <div className="min-w-0">
+        </CollapsiblePanel>
+        <CollapsiblePanel title="Entry Zones" className="min-w-0">
           <EntryZones />
-        </div>
+        </CollapsiblePanel>
       </div>
 
       <CrossoverLog />
@@ -113,34 +116,44 @@ export default function DashboardContent() {
   const activeTab = useStore((state) => state.activeTab);
 
   return (
-    <main className="flex-1 py-3.5 px-4 max-w-[1000px] mx-auto w-full">
-      {activeTab === 'chart' && <ChartContent />}
+    <main className="mx-auto flex-1 w-full max-w-[1120px] px-3.5 py-4 pb-24 md:px-4 md:py-5 md:pb-6">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.16, ease: 'easeOut' }}
+        >
+          {activeTab === 'chart' && <ChartContent />}
 
-      {activeTab === 'calc' && (
-        <div className="grid grid-cols-2 gap-2.5 items-start">
-          <div className="min-w-0">
-            <RRCard />
-            <GoalCard />
-          </div>
-          <div className="min-w-0">
-            <FuturesCard />
-          </div>
-        </div>
-      )}
+          {activeTab === 'calc' && (
+            <div className="grid grid-cols-1 gap-2.5 items-start md:grid-cols-2">
+              <CollapsiblePanel title="Risk Calculator" className="min-w-0">
+                <RRCard />
+                <GoalCard />
+              </CollapsiblePanel>
+              <CollapsiblePanel title="Futures" className="min-w-0">
+                <FuturesCard />
+              </CollapsiblePanel>
+            </div>
+          )}
 
-      {activeTab === 'journal' && <TradeLog />}
+          {activeTab === 'journal' && <TradeLog />}
 
-      {activeTab === 'strategy' && (
-        <div className="max-w-[760px] mx-auto">
-          <StrategyBuilder />
-        </div>
-      )}
+          {activeTab === 'strategy' && (
+            <div className="max-w-[760px] mx-auto">
+              <StrategyBuilder />
+            </div>
+          )}
 
-      {activeTab === 'screener' && (
-        <div className="max-w-[760px] mx-auto">
-          <ScreenerPanel />
-        </div>
-      )}
+          {activeTab === 'screener' && (
+            <div className="max-w-[760px] mx-auto">
+              <ScreenerPanel />
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </main>
   );
 }

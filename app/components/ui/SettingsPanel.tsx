@@ -213,7 +213,7 @@ export default function SettingsPanel() {
           <input
             value={defaultSym}
             onChange={(e) => setSettings({ defaultSym: e.target.value.toUpperCase() })}
-            className={`${settingsInputClass} w-[110px]`}
+            className={`${settingsInputClass} w-27.5`}
           />
         </SettingsRow>
 

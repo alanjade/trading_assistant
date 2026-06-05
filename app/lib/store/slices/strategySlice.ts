@@ -3,12 +3,14 @@
 //  Trading strategy management and evaluation
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { Strategy } from '../../strategy';
 import type { Candle } from '../../indicators';
+import type { Strategy } from '../../strategy';
 import { buildSnapshot, evaluateStrategy, PRESET_STRATEGIES } from '../../strategy';
 import { makeId } from '../helpers';
-import type { StrategySlice, StoreState, StrategySliceCreator } from '../types';
+import type { StoreState, StrategySlice, StrategySliceCreator } from '../types';
 import type { StateCreator } from 'zustand';
+import { strategyStorage } from '@/features/market/services/storageService';
+import { enqueueOptimisticUpdate } from '@/lib/syncEngine';
 
 const defaultStrategy: StrategySlice = {
   strategies: [],
@@ -20,28 +22,48 @@ const defaultStrategy: StrategySlice = {
 //  Slice Creator
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const createStrategySlice: StateCreator<StoreState, [], [], StrategySliceCreator> = (set, get) => ({
+export const createStrategySlice: StateCreator<StoreState, [], [], StrategySliceCreator> = (
+  set,
+  get
+) => ({
   ...defaultStrategy,
 
-  addStrategy: (s: Strategy) =>
+  addStrategy: (s: Strategy) => {
     set((state: StoreState) => ({
       strategies: [...state.strategies, s],
-    })),
-
+    }));
+    enqueueOptimisticUpdate({ entity: 'strategy', action: 'create', payload: s }).catch(
+      console.error
+    );
+    strategyStorage.saveStrategy(s).catch(console.error);
+  },
 
   updateStrategy: (id: string, patch: Partial<Strategy>) =>
-    set((state: StoreState) => ({
-      strategies: state.strategies.map((s: Strategy) => (s.id === id ? { ...s, ...patch } : s)),
-    })),
+    set((state: StoreState) => {
+      const strategies = state.strategies.map((s: Strategy) =>
+        s.id === id ? { ...s, ...patch } : s
+      );
+      const updated = strategies.find((s: Strategy) => s.id === id);
+      if (updated) {
+        enqueueOptimisticUpdate({ entity: 'strategy', action: 'update', payload: updated }).catch(
+          console.error
+        );
+        strategyStorage.saveStrategy(updated).catch(console.error);
+      }
+      return { strategies };
+    }),
 
-
-  deleteStrategy: (id: string) =>
+  deleteStrategy: (id: string) => {
     set((state: StoreState) => ({
       strategies: state.strategies.filter((s: Strategy) => s.id !== id),
       activeStrategyId: state.activeStrategyId === id ? 'preset-3ema' : state.activeStrategyId,
       strategySignal: state.activeStrategyId === id ? null : state.strategySignal,
-    })),
-
+    }));
+    enqueueOptimisticUpdate({ entity: 'strategy', action: 'delete', payload: { id } }).catch(
+      console.error
+    );
+    strategyStorage.deleteStrategy(id).catch(console.error);
+  },
 
   setActiveStrategy: (id: string | null) =>
     set({
@@ -84,18 +106,20 @@ export const createStrategySlice: StateCreator<StoreState, [], [], StrategySlice
       const p = JSON.parse(json);
       if (!p?.name) return { ok: false, error: 'Missing name' };
       if (!p.longEntry && !p.shortEntry) return { ok: false, error: 'No entry conditions' };
+      const imported = {
+        ...p,
+        id: makeId(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        enabled: p.enabled ?? true,
+      };
       set((s: StoreState) => ({
-        strategies: [
-          ...s.strategies,
-          {
-            ...p,
-            id: makeId(),
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            enabled: p.enabled ?? true,
-          },
-        ],
+        strategies: [...s.strategies, imported],
       }));
+      enqueueOptimisticUpdate({ entity: 'strategy', action: 'create', payload: imported }).catch(
+        console.error
+      );
+      strategyStorage.saveStrategy(imported).catch(console.error);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: `${e}` };
@@ -105,26 +129,44 @@ export const createStrategySlice: StateCreator<StoreState, [], [], StrategySlice
   duplicateStrategy: (id: string) => {
     const orig = [...PRESET_STRATEGIES, ...get().strategies].find((s) => s.id === id);
     if (!orig) return;
+    const copy = {
+      ...JSON.parse(JSON.stringify(orig)),
+      id: makeId(),
+      name: orig.name + ' (copy)',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      enabled: false,
+    };
     set((s: StoreState) => ({
-      strategies: [
-        ...s.strategies,
-        {
-          ...JSON.parse(JSON.stringify(orig)),
-          id: makeId(),
-          name: orig.name + ' (copy)',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          enabled: false,
-        },
-      ],
+      strategies: [...s.strategies, copy],
     }));
+    enqueueOptimisticUpdate({ entity: 'strategy', action: 'create', payload: copy }).catch(
+      console.error
+    );
+    strategyStorage.saveStrategy(copy).catch(console.error);
   },
 
   toggleStrategyEnabled: (id: string) =>
-    set((s: StoreState) => ({
-      strategies: s.strategies.map((st: Strategy) =>
+    set((s: StoreState) => {
+      const strategies = s.strategies.map((st: Strategy) =>
         st.id === id ? { ...st, enabled: !st.enabled, updatedAt: Date.now() } : st
-      ),
-    })),
+      );
+      const updated = strategies.find((strategy: Strategy) => strategy.id === id);
+      if (updated) {
+        enqueueOptimisticUpdate({ entity: 'strategy', action: 'update', payload: updated }).catch(
+          console.error
+        );
+        strategyStorage.saveStrategy(updated).catch(console.error);
+      }
+      return { strategies };
+    }),
 
+  hydrateStrategiesFromCache: async () => {
+    try {
+      const strategies = await strategyStorage.getAllStrategies();
+      if (strategies.length) set({ strategies });
+    } catch (error) {
+      console.error('hydrateStrategiesFromCache failed:', error);
+    }
+  },
 });

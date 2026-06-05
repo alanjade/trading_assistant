@@ -49,3 +49,4 @@ TODO.md
 app/lib/__tests__/
 app/features/calculator/services/__tests__/riskRewardService.test.ts
 app/features/chart/services/__tests__/indicatorService.test.ts
+app/features/market/services/__tests__/storageService.test.ts

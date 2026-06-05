@@ -299,6 +299,7 @@ export interface Actions {
   importStrategy: (json: string) => { ok: boolean; error?: string };
   duplicateStrategy: (id: string) => void;
   toggleStrategyEnabled: (id: string) => void;
+  hydrateStrategiesFromCache: () => Promise<void>;
   openPaperPos: (pos: PaperPosition) => void;
   closePaperPos: (id: string, price: number, reason: PaperPosition['status']) => void;
   tickPaperPositions: (price: number, atr: number | null) => void;
@@ -313,82 +314,93 @@ export interface Actions {
 }
 
 // Combined store state type
-export type CalcSliceCreator = CalcSlice & Pick<Actions,
-  | 'setActiveTab'
-  | 'setCurrentDir'
-  | 'setRrRatio'
-  | 'setEntryPrice'
-  | 'setStopPrice'
-  | 'setSizeUsd'
-  | 'setTokens'
-  | 'setLeverage'
-  | 'setFeeType'
-  | 'setCapital'
-  | 'setGoalPct'
-  | 'setMargin'
-  | 'applySuggestionToCalc'
->;
+export type CalcSliceCreator = CalcSlice &
+  Pick<
+    Actions,
+    | 'setActiveTab'
+    | 'setCurrentDir'
+    | 'setRrRatio'
+    | 'setEntryPrice'
+    | 'setStopPrice'
+    | 'setSizeUsd'
+    | 'setTokens'
+    | 'setLeverage'
+    | 'setFeeType'
+    | 'setCapital'
+    | 'setGoalPct'
+    | 'setMargin'
+    | 'applySuggestionToCalc'
+  >;
 
-export type SettingsSliceCreator = SettingsSlice & Pick<Actions,
-  | 'setChartDrawings'
-  | 'setSettings'
-  | 'toggleIndicator'
-  | 'setIndicatorParam'
-  | 'resetIndicatorParams'
-  | 'setSoundEnabled'
-  | 'setNotifEnabled'
->;
+export type SettingsSliceCreator = SettingsSlice &
+  Pick<
+    Actions,
+    | 'setChartDrawings'
+    | 'setSettings'
+    | 'toggleIndicator'
+    | 'setIndicatorParam'
+    | 'resetIndicatorParams'
+    | 'setSoundEnabled'
+    | 'setNotifEnabled'
+  >;
 
-export type ChartSliceCreator = ChartSlice & Pick<Actions,
-  | 'setSym'
-  | 'setTf'
-  | 'resetChartState'
-  | 'addCandleToState'
-  | 'setCurrentCandle'
-  | 'setLivePrice'
-  | 'setConnStatus'
-  | 'refreshSuggestion'
-  | 'setChartDrawings'
-  | 'setPartialTPs'
-  | 'toggleTPHit'
-  | 'setAtrTrailMult'
-  | 'setAtrTrailActive'
-  | 'addSessionTrade'
-  | 'clearSessionTrades'
-  | 'setMaxDailyLossUsd'
-  | 'setDailyLossBannerDismissed'
-  | 'addPriceAlert'
-  | 'removePriceAlert'
-  | 'clearTriggeredAlerts'
-  | 'setBacktestResult'
-  | 'setBacktestRunning'
-  | 'openPaperPos'
-  | 'closePaperPos'
-  | 'tickPaperPositions'
-  | 'resetPaperAccount'
-  | 'updatePaperNote'
->;
+export type ChartSliceCreator = ChartSlice &
+  Pick<
+    Actions,
+    | 'setSym'
+    | 'setTf'
+    | 'resetChartState'
+    | 'addCandleToState'
+    | 'setCurrentCandle'
+    | 'setLivePrice'
+    | 'setConnStatus'
+    | 'refreshSuggestion'
+    | 'setChartDrawings'
+    | 'setPartialTPs'
+    | 'toggleTPHit'
+    | 'setAtrTrailMult'
+    | 'setAtrTrailActive'
+    | 'addSessionTrade'
+    | 'clearSessionTrades'
+    | 'setMaxDailyLossUsd'
+    | 'setDailyLossBannerDismissed'
+    | 'addPriceAlert'
+    | 'removePriceAlert'
+    | 'clearTriggeredAlerts'
+    | 'setBacktestResult'
+    | 'setBacktestRunning'
+    | 'openPaperPos'
+    | 'closePaperPos'
+    | 'tickPaperPositions'
+    | 'resetPaperAccount'
+    | 'updatePaperNote'
+  >;
 
-export type JournalSliceCreator = JournalSlice & Pick<Actions,
-  | 'addTrade'
-  | 'updateTrade'
-  | 'deleteTrade'
-  | 'hydrateTradesFromIdb'
-  | 'importTradesCsv'
-  | 'exportTradesCsv'
->;
+export type JournalSliceCreator = JournalSlice &
+  Pick<
+    Actions,
+    | 'addTrade'
+    | 'updateTrade'
+    | 'deleteTrade'
+    | 'hydrateTradesFromIdb'
+    | 'importTradesCsv'
+    | 'exportTradesCsv'
+  >;
 
-export type StrategySliceCreator = StrategySlice & Pick<Actions,
-  | 'addStrategy'
-  | 'updateStrategy'
-  | 'deleteStrategy'
-  | 'setActiveStrategy'
-  | 'evalActiveStrategy'
-  | 'exportStrategy'
-  | 'importStrategy'
-  | 'duplicateStrategy'
-  | 'toggleStrategyEnabled'
->;
+export type StrategySliceCreator = StrategySlice &
+  Pick<
+    Actions,
+    | 'addStrategy'
+    | 'updateStrategy'
+    | 'deleteStrategy'
+    | 'setActiveStrategy'
+    | 'evalActiveStrategy'
+    | 'exportStrategy'
+    | 'importStrategy'
+    | 'duplicateStrategy'
+    | 'toggleStrategyEnabled'
+    | 'hydrateStrategiesFromCache'
+  >;
 export type StoreState = ChartSlice &
   CalcSlice &
   JournalSlice &

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import IndicatorPanel from '@/features/chart/components/IndicatorPanel';
+import { chartLayoutStorage } from '@/features/market/services/storageService';
 import { fetchKlines } from '@/lib/api';
 import {
   ActiveDraw,
@@ -24,11 +25,10 @@ import {
 } from '@/lib/indicators2';
 import { useStore } from '@/lib/store';
 import { eventBus } from '@/lib/streamEvents';
+import { getChartThemeColors } from '@/lib/themeService';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DPR = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-const GC = 'rgba(255,255,255,0.04)';
-const TC = 'rgba(255,255,255,0.22)';
 
 const CHART = {
   visibleCandles: 80,
@@ -42,9 +42,40 @@ const CHART = {
   vpWidth: 54,
 } as const;
 
+const MIN_VISIBLE_CANDLES = 24;
+const MAX_VISIBLE_CANDLES = 180;
+const SWIPE_PAN_CANDLES = 18;
+const SWIPE_MIN_PX = 48;
+const DOUBLE_TAP_MS = 280;
+const DOUBLE_TAP_MAX_DRIFT_PX = 24;
 const TIMEFRAMES_FOR_MTF = ['15m', '1h', '4h', '1d'];
 
+type ChartPinchState = {
+  distance: number;
+  visibleCandles: number;
+};
+
+type ChartTouchState = {
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  startedAt: number;
+};
+
+function clampVisibleCandles(value: number) {
+  return Math.min(MAX_VISIBLE_CANDLES, Math.max(MIN_VISIBLE_CANDLES, Math.round(value)));
+}
+
+function getTouchDistance(touches: React.TouchList) {
+  if (touches.length < 2) return 0;
+  const [first, second] = [touches[0], touches[1]];
+  return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
 const COL = {
+  grid: 'rgba(255,255,255,0.04)',
+  axisText: 'rgba(255,255,255,0.22)',
   ema9: '#ff6b35',
   ema20: '#4da6ff',
   ema50: '#a78bff',
@@ -113,7 +144,11 @@ type GLChartEngine = {
   colorLoc: number;
 };
 
-function compileShader(gl: WebGLRenderingContext | WebGL2RenderingContext, type: number, source: string) {
+function compileShader(
+  gl: WebGLRenderingContext | WebGL2RenderingContext,
+  type: number,
+  source: string
+) {
   const shader = gl.createShader(type);
   if (!shader) return null;
   gl.shaderSource(shader, source);
@@ -301,7 +336,7 @@ function drawOscPane(
   const ty = (v: number) => padT + (1 - (v - lo) / range) * cH;
   const startI = n - series.length;
   levels.forEach((lv) => {
-    ctx.strokeStyle = lv.col ?? GC;
+    ctx.strokeStyle = lv.col ?? COL.grid;
     ctx.lineWidth = 0.5;
     if (lv.dash) ctx.setLineDash([3, 3]);
     else ctx.setLineDash([]);
@@ -310,7 +345,7 @@ function drawOscPane(
     ctx.lineTo(padL + cW, ty(lv.v));
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = TC;
+    ctx.fillStyle = COL.axisText;
     ctx.font = '9px JetBrains Mono,monospace';
     ctx.textAlign = 'left';
     ctx.fillText(String(lv.v), padL + cW + 4, ty(lv.v) + 3.5);
@@ -362,7 +397,14 @@ export default function CandleChart() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [mtfSignals, setMtfSignals] = useState<TFSignal[]>([]);
   const [mtfLoading, setMtfLoading] = useState(false);
+  const [visibleCandleCount, setVisibleCandleCount] = useState<number>(CHART.visibleCandles);
+  const [panOffset, setPanOffset] = useState(0);
   const histPageRef = useRef(0);
+  const pinchRef = useRef<ChartPinchState | null>(null);
+  const touchRef = useRef<ChartTouchState | null>(null);
+  const lastTapRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const layoutHydratedRef = useRef(false);
+  const layoutSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Canvas refs
   const priceRef = useRef<HTMLCanvasElement>(null);
@@ -439,6 +481,7 @@ export default function CandleChart() {
     cvdCumDeltas,
     patterns,
     activeIndicators,
+    theme,
   } = useStore();
 
   // ── All candles (live + history) ──────────────────────────────────────────
@@ -454,11 +497,18 @@ export default function CandleChart() {
     [historyCandles, committedCandles]
   );
 
-  const visCandles = useMemo(() => allCandles.slice(-CHART.visibleCandles), [allCandles]);
-  const visOffset = useMemo(
-    () => Math.max(0, allCandles.length - CHART.visibleCandles),
-    [allCandles]
+  const visibleWindow = useMemo(() => {
+    const end = Math.max(0, allCandles.length - panOffset);
+    const start = Math.max(0, end - visibleCandleCount);
+    return { start, end };
+  }, [allCandles.length, panOffset, visibleCandleCount]);
+  const visCandles = useMemo(
+    () => allCandles.slice(visibleWindow.start, visibleWindow.end),
+    [allCandles, visibleWindow]
   );
+  const visOffset = visibleWindow.start;
+  const visEndOffset = visibleWindow.end;
+  const isLiveWindow = panOffset === 0;
 
   // Derived overlays
   const volumeProfile = useMemo(() => calcVolumeProfile(visCandles, 24), [visCandles]);
@@ -515,7 +565,61 @@ export default function CandleChart() {
   useEffect(() => {
     setHistoryCandles([]);
     histPageRef.current = 0;
+    setPanOffset(0);
+    layoutHydratedRef.current = false;
   }, [sym, tf]);
+
+  useEffect(() => {
+    let cancelled = false;
+    layoutHydratedRef.current = false;
+    chartLayoutStorage.getLayout(sym, tf).then((layout) => {
+      if (cancelled) return;
+      if (layout) {
+        setDrawings(layout.drawings);
+        setShowVP(layout.showVolumeProfile);
+        setShowAutoFib(layout.showAutoFib);
+        setVisibleCandleCount(clampVisibleCandles(layout.visibleCandleCount));
+        setPanOffset(Math.max(0, layout.panOffset));
+      } else {
+        setDrawings([]);
+        setShowVP(true);
+        setShowAutoFib(true);
+        setVisibleCandleCount(CHART.visibleCandles);
+        setPanOffset(0);
+      }
+      layoutHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sym, tf]);
+
+  useEffect(() => {
+    if (!layoutHydratedRef.current) return;
+    if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
+    layoutSaveTimerRef.current = setTimeout(() => {
+      chartLayoutStorage
+        .saveLayout({
+          sym,
+          tf,
+          drawings,
+          showVolumeProfile: showVP,
+          showAutoFib,
+          visibleCandleCount,
+          panOffset,
+        })
+        .catch(console.error);
+    }, 500);
+    return () => {
+      if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
+    };
+  }, [drawings, panOffset, showAutoFib, showVP, sym, tf, visibleCandleCount]);
+
+  useEffect(() => {
+    setPanOffset((current) =>
+      Math.min(current, Math.max(0, allCandles.length - MIN_VISIBLE_CANDLES))
+    );
+  }, [allCandles.length]);
 
   // ── MTF confluence ────────────────────────────────────────────────────────
   const loadMTF = useCallback(async () => {
@@ -571,7 +675,7 @@ export default function CandleChart() {
     return () => clearInterval(id);
   }, [loadMTF]);
 
-  // ── Keyboard / event shortcuts ────────────────────────────────────────────
+  // ── Keyboard / event shorTCuts ────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'f' || e.key === 'F') setFullscreen((fs) => !fs);
@@ -607,10 +711,10 @@ export default function CandleChart() {
       let pMin = Math.min(...visCandles.map((c) => c.l));
       let pMax = Math.max(...visCandles.map((c) => c.h));
       if (activeIndicators.bb) {
-        bbUpper.slice(visOffset).forEach((v) => {
+        bbUpper.slice(visOffset, visEndOffset).forEach((v) => {
           if (v) pMax = Math.max(pMax, v);
         });
-        bbLower.slice(visOffset).forEach((v) => {
+        bbLower.slice(visOffset, visEndOffset).forEach((v) => {
           if (v) pMin = Math.min(pMin, v);
         });
       }
@@ -632,7 +736,16 @@ export default function CandleChart() {
       const ty = (p: number) => padT + cH - ((p - plo) / pR) * cH;
       return { cW, cH, cw, plo, phi, pR, padL, padT, tx, ty, n, vpX: padL + cW };
     },
-    [visCandles, activeIndicators.bb, bbUpper, bbLower, visOffset, fiboOverlay, livePrice]
+    [
+      visCandles,
+      activeIndicators.bb,
+      bbUpper,
+      bbLower,
+      visOffset,
+      visEndOffset,
+      fiboOverlay,
+      livePrice,
+    ]
   );
 
   // ── Draw Price Pane (WebGL engine for candle bodies) ──────────────────────
@@ -650,7 +763,7 @@ export default function CandleChart() {
     const lineVertices: number[] = [];
     const lineColors: number[] = [];
     const rectVertices: number[] = [];
-    const rectColors: number[] = [];
+    const recTColors: number[] = [];
 
     visCandles.forEach((c, i) => {
       const x = tx(i);
@@ -662,7 +775,7 @@ export default function CandleChart() {
       const bT = ty(Math.max(c.o, c.c));
       const bB = ty(Math.min(c.o, c.c));
       const bw = Math.max(2, cw2 * CHART.candleWidthRatio);
-      appendRect(rectVertices, rectColors, x - bw / 2, bT, x + bw / 2, bB, color);
+      appendRect(rectVertices, recTColors, x - bw / 2, bT, x + bw / 2, bB, color);
     });
 
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -675,7 +788,7 @@ export default function CandleChart() {
       gl.enableVertexAttribArray(posLoc);
       gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(rectColors), gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(recTColors), gl.STATIC_DRAW);
       gl.enableVertexAttribArray(colorLoc);
       gl.vertexAttribPointer(colorLoc, 4, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, rectVertices.length / 2);
@@ -709,13 +822,13 @@ export default function CandleChart() {
     // Grid
     for (let i = 0; i <= CHART.gridDivisions; i++) {
       const y = padT + (cH * i) / CHART.gridDivisions;
-      ctx.strokeStyle = GC;
+      ctx.strokeStyle = COL.grid;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.moveTo(padL, y);
       ctx.lineTo(padL + cW, y);
       ctx.stroke();
-      ctx.fillStyle = TC;
+      ctx.fillStyle = COL.axisText;
       ctx.font = '9px JetBrains Mono,monospace';
       ctx.textAlign = 'left';
       ctx.fillText(fmtPrice(phi - (pR * i) / CHART.gridDivisions), padL + cW + 4, y + 3.5);
@@ -788,9 +901,9 @@ export default function CandleChart() {
 
     // ── Bollinger Bands ──────────────────────────────────────────────────────
     if (activeIndicators.bb) {
-      const ubSlice = bbUpper.slice(visOffset),
-        mbSlice = bbMiddle.slice(visOffset),
-        lbSlice = bbLower.slice(visOffset);
+      const ubSlice = bbUpper.slice(visOffset, visEndOffset),
+        mbSlice = bbMiddle.slice(visOffset, visEndOffset),
+        lbSlice = bbLower.slice(visOffset, visEndOffset);
       const startI = n - ubSlice.length;
       ctx.beginPath();
       ubSlice.forEach((v, i) => {
@@ -831,15 +944,15 @@ export default function CandleChart() {
 
     // ── VWAP ────────────────────────────────────────────────────────────────
     if (activeIndicators.vwap) {
-      const vSlice = vwapVals.slice(visOffset),
+      const vSlice = vwapVals.slice(visOffset, visEndOffset),
         startI = n - vSlice.length;
       if (activeIndicators.vwapBands) {
         [
           [vwapUpper2, vwapLower2, COL.vwapBand2],
           [vwapUpper1, vwapLower1, COL.vwapBand1],
         ].forEach(([u, l, fill]) => {
-          const us = (u as (number | null)[]).slice(visOffset),
-            ls = (l as (number | null)[]).slice(visOffset);
+          const us = (u as (number | null)[]).slice(visOffset, visEndOffset),
+            ls = (l as (number | null)[]).slice(visOffset, visEndOffset);
           ctx.beginPath();
           us.forEach((v, i) => {
             if (v == null) return;
@@ -877,8 +990,8 @@ export default function CandleChart() {
 
     // ── SuperTrend ───────────────────────────────────────────────────────────
     if (activeIndicators.superTrend) {
-      const stSlice = stVals.slice(visOffset),
-        bullSlice = stBull.slice(visOffset),
+      const stSlice = stVals.slice(visOffset, visEndOffset),
+        bullSlice = stBull.slice(visOffset, visEndOffset),
         startI = n - stSlice.length;
       let prevBull = bullSlice[0];
       ctx.lineWidth = 2;
@@ -906,8 +1019,8 @@ export default function CandleChart() {
 
     // ── PSAR ────────────────────────────────────────────────────────────────
     if (activeIndicators.psar) {
-      const psSlice = psarVals.slice(visOffset),
-        pbSlice = psarBull.slice(visOffset),
+      const psSlice = psarVals.slice(visOffset, visEndOffset),
+        pbSlice = psarBull.slice(visOffset, visEndOffset),
         startI = n - psSlice.length;
       psSlice.forEach((v, i) => {
         if (v == null) return;
@@ -921,9 +1034,9 @@ export default function CandleChart() {
     // ── EMA lines ────────────────────────────────────────────────────────────
     (
       [
-        [e50s.slice(visOffset), COL.ema50, activeIndicators.ema50],
-        [e20s.slice(visOffset), COL.ema20, activeIndicators.ema20],
-        [e9s.slice(visOffset), COL.ema9, activeIndicators.ema9],
+        [e50s.slice(visOffset, visEndOffset), COL.ema50, activeIndicators.ema50],
+        [e20s.slice(visOffset, visEndOffset), COL.ema20, activeIndicators.ema20],
+        [e9s.slice(visOffset, visEndOffset), COL.ema9, activeIndicators.ema9],
       ] as [(number | null)[], string, boolean][]
     ).forEach(([vals, col, show]) => {
       if (!show || vals.length < 2) return;
@@ -982,7 +1095,7 @@ export default function CandleChart() {
 
     // ── Candlestick pattern markers ───────────────────────────────────────────
     if (activeIndicators.patterns) {
-      patterns.slice(visOffset).forEach((pats, i) => {
+      patterns.slice(visOffset, visEndOffset).forEach((pats, i) => {
         if (!pats?.length) return;
         const candle = visCandles[i];
         if (!candle) return;
@@ -1246,11 +1359,11 @@ export default function CandleChart() {
     if (!el || !activeIndicators.macd) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const n = CHART.visibleCandles;
+    const n = visibleCandleCount;
     const { cW, cH, cw, padL, padT } = makePaneCoords(w, h, 68, 2, 4, 4, n);
-    const hSlice = macdHist.slice(visOffset),
-      lSlice = macdLine.slice(visOffset),
-      sSlice = macdSignal.slice(visOffset);
+    const hSlice = macdHist.slice(visOffset, visEndOffset),
+      lSlice = macdLine.slice(visOffset, visEndOffset),
+      sSlice = macdSignal.slice(visOffset, visEndOffset);
     const startI = n - hSlice.length;
     const allV = [...hSlice, ...lSlice, ...sSlice].filter((v) => v != null) as number[];
     if (!allV.length) return;
@@ -1298,15 +1411,23 @@ export default function CandleChart() {
       });
       ctx.stroke();
     });
-  }, [macdHist, macdLine, macdSignal, visOffset, activeIndicators.macd]);
+  }, [
+    macdHist,
+    macdLine,
+    macdSignal,
+    visOffset,
+    visEndOffset,
+    activeIndicators.macd,
+    visibleCandleCount,
+  ]);
 
   const drawRSI = useCallback(() => {
     const el = rsiRef.current;
     if (!el || !activeIndicators.rsi) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const n = CHART.visibleCandles;
-    const rv = rsiVals.slice(visOffset);
+    const n = visibleCandleCount;
+    const rv = rsiVals.slice(visOffset, visEndOffset);
     const { cW, cH, cw, padL, padT } = makePaneCoords(w, h, 68, 2, 4, 4, n);
     const ty = (v: number) => padT + ((100 - v) / 100) * cH;
     ctx.fillStyle = 'rgba(255,61,90,0.05)';
@@ -1359,7 +1480,15 @@ export default function CandleChart() {
       ctx.fillStyle = grad;
       ctx.fill();
     }
-  }, [rsiVals, visOffset, activeIndicators.rsi, divergence, allCandles]);
+  }, [
+    rsiVals,
+    visOffset,
+    visEndOffset,
+    activeIndicators.rsi,
+    divergence,
+    allCandles,
+    visibleCandleCount,
+  ]);
 
   const drawStochRSI = useCallback(() => {
     const el = stochRef.current;
@@ -1370,7 +1499,7 @@ export default function CandleChart() {
       ctx,
       w,
       h,
-      stochRsiK.slice(visOffset),
+      stochRsiK.slice(visOffset, visEndOffset),
       COL.stochK,
       0,
       100,
@@ -1379,22 +1508,29 @@ export default function CandleChart() {
         { v: 50, col: 'rgba(255,255,255,0.08)' },
         { v: 20, col: 'rgba(0,229,160,0.3)', dash: true },
       ],
-      CHART.visibleCandles,
-      { vals: stochRsiD.slice(visOffset), color: COL.stochD }
+      visibleCandleCount,
+      { vals: stochRsiD.slice(visOffset, visEndOffset), color: COL.stochD }
     );
-  }, [stochRsiK, stochRsiD, visOffset, activeIndicators.stochRsi]);
+  }, [
+    stochRsiK,
+    stochRsiD,
+    visOffset,
+    visEndOffset,
+    activeIndicators.stochRsi,
+    visibleCandleCount,
+  ]);
 
   const drawADX = useCallback(() => {
     const el = adxRef.current;
     if (!el || !activeIndicators.adx) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const n = CHART.visibleCandles;
+    const n = visibleCandleCount;
     drawOscPane(
       ctx,
       w,
       h,
-      adxVals.slice(visOffset),
+      adxVals.slice(visOffset, visEndOffset),
       COL.adx,
       0,
       100,
@@ -1405,8 +1541,8 @@ export default function CandleChart() {
       n
     );
     [
-      { vals: plusDI.slice(visOffset), col: COL.plusDI },
-      { vals: minusDI.slice(visOffset), col: COL.minusDI },
+      { vals: plusDI.slice(visOffset, visEndOffset), col: COL.plusDI },
+      { vals: minusDI.slice(visOffset, visEndOffset), col: COL.minusDI },
     ].forEach(({ vals, col }) => {
       const { cw, padL, padT, cH } = makePaneCoords(w, h, 68, 2, 4, 4, n);
       const startI = n - vals.length;
@@ -1429,7 +1565,7 @@ export default function CandleChart() {
       ctx.stroke();
       ctx.setLineDash([]);
     });
-  }, [adxVals, plusDI, minusDI, visOffset, activeIndicators.adx]);
+  }, [adxVals, plusDI, minusDI, visOffset, visEndOffset, activeIndicators.adx, visibleCandleCount]);
 
   const drawWillR = useCallback(() => {
     const el = willRRef.current;
@@ -1440,7 +1576,7 @@ export default function CandleChart() {
       ctx,
       w,
       h,
-      willRVals.slice(visOffset),
+      willRVals.slice(visOffset, visEndOffset),
       COL.willR,
       -100,
       0,
@@ -1449,16 +1585,16 @@ export default function CandleChart() {
         { v: -50, col: 'rgba(255,255,255,0.08)' },
         { v: -80, col: 'rgba(0,229,160,0.3)', dash: true },
       ],
-      CHART.visibleCandles
+      visibleCandleCount
     );
-  }, [willRVals, visOffset, activeIndicators.williamsR]);
+  }, [willRVals, visOffset, visEndOffset, activeIndicators.williamsR, visibleCandleCount]);
 
   const drawCCI = useCallback(() => {
     const el = cciRef.current;
     if (!el || !activeIndicators.cci) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const cv = cciVals.slice(visOffset);
+    const cv = cciVals.slice(visOffset, visEndOffset);
     const allV = cv.filter((v) => v != null) as number[];
     const lo = Math.min(-200, ...allV),
       hi = Math.max(200, ...allV);
@@ -1475,9 +1611,9 @@ export default function CandleChart() {
         { v: 0, col: 'rgba(255,255,255,0.08)' },
         { v: -100, col: 'rgba(0,229,160,0.3)', dash: true },
       ],
-      CHART.visibleCandles
+      visibleCandleCount
     );
-  }, [cciVals, visOffset, activeIndicators.cci]);
+  }, [cciVals, visOffset, visEndOffset, activeIndicators.cci, visibleCandleCount]);
 
   const drawVol = useCallback(() => {
     const el = volRef.current;
@@ -1512,7 +1648,7 @@ export default function CandleChart() {
       const bH = Math.max(1, (c.v / maxV) * cH);
       ctx.fillRect(padL + i * cw + 1, padT + cH - bH, Math.max(1, cw - 2), bH);
     });
-    ctx.fillStyle = TC;
+    ctx.fillStyle = COL.axisText;
     ctx.font = '9px JetBrains Mono,monospace';
     ctx.textAlign = 'left';
     ctx.fillText('avg ' + fmtK(avgV), padL + cW + 4, avgY + 3.5);
@@ -1523,8 +1659,8 @@ export default function CandleChart() {
     if (!el || !activeIndicators.obv) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const n = CHART.visibleCandles;
-    const ov = obvVals.slice(visOffset);
+    const n = visibleCandleCount;
+    const ov = obvVals.slice(visOffset, visEndOffset);
     if (ov.length < 2) return;
     const { cW, cH, cw, padL, padT } = makePaneCoords(w, h, 68, 2, 4, 4, n);
     const lo = Math.min(...ov),
@@ -1542,19 +1678,19 @@ export default function CandleChart() {
         : ctx.lineTo(padL + (startI + i) * cw + cw / 2, ty(v))
     );
     ctx.stroke();
-    ctx.fillStyle = TC;
+    ctx.fillStyle = COL.axisText;
     ctx.font = '9px JetBrains Mono,monospace';
     ctx.textAlign = 'left';
     ctx.fillText(fmtK(ov[ov.length - 1]), padL + cW + 4, ty(ov[ov.length - 1]) + 3.5);
-  }, [obvVals, visOffset, activeIndicators.obv]);
+  }, [obvVals, visOffset, visEndOffset, activeIndicators.obv, visibleCandleCount]);
 
   const drawCVD = useCallback(() => {
     const el = cvdRef.current;
     if (!el || !activeIndicators.cvd) return;
     const { ctx, w, h } = setupCanvas(el);
     ctx.clearRect(0, 0, w, h);
-    const barSlice = cvdBarDeltas.slice(visOffset),
-      cumSlice = cvdCumDeltas.slice(visOffset);
+    const barSlice = cvdBarDeltas.slice(visOffset, visEndOffset),
+      cumSlice = cvdCumDeltas.slice(visOffset, visEndOffset);
     const n = visCandles.length;
     if (!barSlice.length || n < 2) return;
     const { cW, cH, cw, padL, padT } = makePaneCoords(w, h, 68, 2, 6, 4, n);
@@ -1594,7 +1730,7 @@ export default function CandleChart() {
       ctx.textAlign = 'left';
       ctx.fillText(fmtK(lastCum), padL + cW + 4, tyCum(lastCum) + 3.5);
     }
-  }, [cvdBarDeltas, cvdCumDeltas, visCandles, visOffset, activeIndicators.cvd]);
+  }, [cvdBarDeltas, cvdCumDeltas, visCandles, visOffset, visEndOffset, activeIndicators.cvd]);
 
   // ── Mouse handlers ─────────────────────────────────────────────────────────
   const getBarIdx = useCallback(
@@ -1841,15 +1977,132 @@ export default function CandleChart() {
     scheduleCrosshair(-1);
   }, [scheduleCrosshair]);
 
+  const panChart = useCallback(
+    (deltaCandles: number) => {
+      setPanOffset((current) => {
+        const maxPan = Math.max(
+          0,
+          allCandles.length - Math.min(visibleCandleCount, allCandles.length)
+        );
+        return Math.min(maxPan, Math.max(0, current + deltaCandles));
+      });
+    },
+    [allCandles.length, visibleCandleCount]
+  );
+
+  const resetChartView = useCallback(() => {
+    setPanOffset(0);
+    setVisibleCandleCount(CHART.visibleCandles);
+    scheduleCrosshair(-1);
+  }, [scheduleCrosshair]);
+
   // Scroll wheel → load older history
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (e.deltaX < -40 || (e.shiftKey && e.deltaY < 0)) loadOlderPage();
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setVisibleCandleCount((current) => clampVisibleCandles(current + (e.deltaY > 0 ? 8 : -8)));
+        return;
+      }
+      if (Math.abs(e.deltaX) > 24) {
+        e.preventDefault();
+        panChart(e.deltaX > 0 ? -8 : 8);
+        return;
+      }
+      if (e.shiftKey && e.deltaY < 0) loadOlderPage();
     },
-    [loadOlderPage]
+    [loadOlderPage, panChart]
   );
 
   // ── Effects ────────────────────────────────────────────────────────────────
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLCanvasElement>) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchRef.current = {
+          startX: touch.clientX,
+          startY: touch.clientY,
+          lastX: touch.clientX,
+          lastY: touch.clientY,
+          startedAt: Date.now(),
+        };
+        return;
+      }
+
+      if (e.touches.length < 2) return;
+      const distance = getTouchDistance(e.touches);
+      if (!distance) return;
+      e.preventDefault();
+      setActiveDraw(null);
+      touchRef.current = null;
+      pinchRef.current = { distance, visibleCandles: visibleCandleCount };
+      if (ttRef.current) ttRef.current.style.opacity = '0';
+      scheduleCrosshair(-1);
+    },
+    [scheduleCrosshair, visibleCandleCount]
+  );
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    const pinch = pinchRef.current;
+    if (!pinch && e.touches.length === 1 && touchRef.current) {
+      const touch = e.touches[0];
+      touchRef.current.lastX = touch.clientX;
+      touchRef.current.lastY = touch.clientY;
+      return;
+    }
+
+    if (!pinch || e.touches.length < 2) return;
+    const distance = getTouchDistance(e.touches);
+    if (!distance) return;
+    e.preventDefault();
+    const nextVisibleCandles = clampVisibleCandles(
+      pinch.visibleCandles * (pinch.distance / distance)
+    );
+    setVisibleCandleCount((current) =>
+      current === nextVisibleCandles ? current : nextVisibleCandles
+    );
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLCanvasElement>) => {
+      if (e.touches.length < 2) pinchRef.current = null;
+      if (e.touches.length > 0) return;
+
+      const touchState = touchRef.current;
+      touchRef.current = null;
+      const endedTouch = e.changedTouches[0];
+      if (!touchState || !endedTouch) return;
+
+      const dx = endedTouch.clientX - touchState.startX;
+      const dy = endedTouch.clientY - touchState.startY;
+      const travel = Math.hypot(dx, dy);
+      const now = Date.now();
+
+      if (Math.abs(dx) >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        e.preventDefault();
+        panChart(dx > 0 ? SWIPE_PAN_CANDLES : -SWIPE_PAN_CANDLES);
+        return;
+      }
+
+      const lastTap = lastTapRef.current;
+      if (
+        lastTap &&
+        now - lastTap.time <= DOUBLE_TAP_MS &&
+        travel <= DOUBLE_TAP_MAX_DRIFT_PX &&
+        Math.hypot(endedTouch.clientX - lastTap.x, endedTouch.clientY - lastTap.y) <=
+          DOUBLE_TAP_MAX_DRIFT_PX
+      ) {
+        e.preventDefault();
+        lastTapRef.current = null;
+        resetChartView();
+        return;
+      }
+
+      lastTapRef.current = { x: endedTouch.clientX, y: endedTouch.clientY, time: now };
+    },
+    [panChart, resetChartView]
+  );
+
   const redrawAll = useCallback(() => {
     drawPrice();
     drawMACD();
@@ -1902,6 +2155,12 @@ export default function CandleChart() {
     scheduleRedrawAll();
     return cancelScheduledFrames;
   }, [scheduleRedrawAll, cancelScheduledFrames]);
+
+  useEffect(() => {
+    Object.assign(COL, getChartThemeColors(theme));
+    scheduleRedrawAll();
+  }, [theme, scheduleRedrawAll]);
+
   useEffect(() => {
     window.addEventListener('resize', scheduleRedrawAll);
     return () => {
@@ -1927,7 +2186,7 @@ export default function CandleChart() {
     () => vwapVals.filter((v) => v != null).slice(-1)[0] as number | undefined,
     [vwapVals]
   );
-  const latestCVD = useMemo(() => cvdCumDeltas[cvdCumDeltas.length - 1], [cvdCumDeltas]);
+  const latesTCVD = useMemo(() => cvdCumDeltas[cvdCumDeltas.length - 1], [cvdCumDeltas]);
   const latestMACD = useMemo(
     () => macdLine.filter((v) => v != null).slice(-1)[0] as number | undefined,
     [macdLine]
@@ -2028,7 +2287,7 @@ export default function CandleChart() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div ref={containerRef} style={containerStyle}>
+    <div ref={containerRef} style={containerStyle} data-onboard="candle-chart">
       {/* ── Legend row ── */}
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}
@@ -2277,7 +2536,8 @@ export default function CandleChart() {
           {loadingHistory ? '…' : '← +200'}
         </button>
         <span style={{ fontSize: 9, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
-          {allCandles.length} bars
+          {allCandles.length} bars · {visibleCandleCount} view ·{' '}
+          {isLiveWindow ? 'live' : `${panOffset} back`}
         </span>
 
         {activeTool && (
@@ -2325,6 +2585,35 @@ export default function CandleChart() {
       </div>
 
       {/* ── Price canvas ── */}
+      <div className="mb-2 grid grid-cols-3 gap-1.5 md:hidden">
+        <button
+          type="button"
+          onClick={() => setFullscreen((value) => !value)}
+          className="rounded-sm border border-border2 bg-bg3 px-2 py-2 font-mono text-10px font-semibold text-text2"
+        >
+          {fullscreen ? 'Exit' : 'Full'}
+        </button>
+        <button
+          type="button"
+          onClick={loadOlderPage}
+          disabled={loadingHistory}
+          className="rounded-sm border border-border2 bg-bg3 px-2 py-2 font-mono text-10px font-semibold text-text2 disabled:opacity-50"
+        >
+          {loadingHistory ? 'Loading' : 'Older'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTool(null);
+            setActiveDraw(null);
+            resetChartView();
+          }}
+          className="rounded-sm border border-border2 bg-bg3 px-2 py-2 font-mono text-10px font-semibold text-text2"
+        >
+          Pan
+        </button>
+      </div>
+
       <div style={{ position: 'relative' }}>
         <canvas
           ref={glPriceRef}
@@ -2359,6 +2648,7 @@ export default function CandleChart() {
             width: '100%',
             borderRadius: 'var(--radius-sm)',
             cursor: activeTool ? 'crosshair' : 'default',
+            touchAction: 'none',
           }}
           onMouseMove={handleMouseMove}
           onMouseDown={handleMouseDown}
@@ -2366,6 +2656,10 @@ export default function CandleChart() {
           onMouseLeave={handleMouseLeave}
           onContextMenu={handleContextMenu}
           onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
         />
       </div>
 
@@ -2473,8 +2767,8 @@ export default function CandleChart() {
       {activeIndicators.cvd && (
         <>
           {paneLabel('CVD · Cumul. Vol Delta', {
-            val: latestCVD != null ? (latestCVD >= 0 ? '+' : '') + fmtK(latestCVD) : undefined,
-            col: latestCVD != null ? (latestCVD >= 0 ? COL.bull : COL.bear) : undefined,
+            val: latesTCVD != null ? (latesTCVD >= 0 ? '+' : '') + fmtK(latesTCVD) : undefined,
+            col: latesTCVD != null ? (latesTCVD >= 0 ? COL.bull : COL.bear) : undefined,
           })}
           <canvas
             ref={cvdRef}

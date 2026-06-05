@@ -22,6 +22,57 @@ export function Card({
   );
 }
 
+export function Skeleton({
+  className = '',
+  style,
+  lines = 0,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+  lines?: number;
+}) {
+  if (lines > 0) {
+    return (
+      <div
+        style={style}
+        className={`w-full rounded border border-border bg-bg2 p-3.5 ${className}`}
+        aria-hidden="true"
+      >
+        {Array.from({ length: lines }, (_, index) => (
+          <div
+            key={index}
+            className={`h-3 animate-pulse rounded-sm bg-bg4 ${index === lines - 1 ? 'w-2/3' : 'w-full'} ${
+              index > 0 ? 'mt-2' : ''
+            }`}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={style}
+      aria-hidden="true"
+      className={`w-full animate-pulse rounded border border-border bg-bg3 ${className}`}
+    />
+  );
+}
+
+export function PanelSkeleton({ className = 'h-72' }: { className?: string }) {
+  return (
+    <div className={`rounded border border-border bg-bg2 p-3.5 ${className}`} aria-hidden="true">
+      <Skeleton className="h-4 w-1/3 border-0 bg-bg4" />
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Skeleton className="h-14 border-0" />
+        <Skeleton className="h-14 border-0" />
+      </div>
+      <Skeleton className="mt-4 h-28 border-0" />
+      <Skeleton className="mt-3 h-3 w-2/3 border-0 bg-bg4" />
+    </div>
+  );
+}
+
 // ── AccentCard (with top gradient stripe) ─────────────────
 export function AccentCard({
   children,
@@ -50,13 +101,16 @@ export function MetricGrid({
   children,
   columns = 2,
   style,
+  className = '',
 }: {
   children: React.ReactNode;
   columns?: number | string;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
     <div
+      className={className}
       style={{
         display: 'grid',
         gridTemplateColumns: typeof columns === 'number' ? `repeat(${columns},1fr)` : columns,
@@ -145,9 +199,14 @@ export function PanelHeader({
   );
 }
 
-export function FieldLabel({ children }: { children: React.ReactNode }) {
+export function FieldLabel({ children, htmlFor }: { children: React.ReactNode; htmlFor?: string }) {
   return (
-    <div className="text-9px font-mono text-text3 uppercase tracking-widest mb-0.5">{children}</div>
+    <label
+      htmlFor={htmlFor}
+      className="block text-9px font-mono text-text3 uppercase tracking-widest mb-0.5"
+    >
+      {children}
+    </label>
   );
 }
 
@@ -158,24 +217,49 @@ export function TextInput({
   placeholder,
   onKeyDown,
   style,
-}: {
-  value: string | number;
-  onChange: (v: string) => void;
-  type?: 'text' | 'number';
-  placeholder?: string;
-  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
-  style?: React.CSSProperties;
+  className = '',
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
+  value?: string | number;
+  onChange?: (v: string) => void;
 }) {
   return (
     <input
+      {...props}
       type={type}
       value={value}
       placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange?.(e.target.value)}
       onKeyDown={onKeyDown}
       style={style}
-      className="w-full px-2 py-1.5 text-sm font-mono bg-bg3 text-text border border-border2 rounded-sm outline-none"
+      className={`w-full px-2 py-1.5 text-sm font-mono bg-bg3 text-text border border-border2 rounded-sm outline-none ${className}`}
     />
+  );
+}
+
+export function StatusPill({
+  children,
+  tone = 'neutral',
+  className = '',
+}: {
+  children: React.ReactNode;
+  tone?: 'neutral' | 'green' | 'red' | 'amber' | 'blue';
+  className?: string;
+}) {
+  const toneClass = {
+    neutral: 'border-border2 bg-bg3/60 text-text2',
+    green: 'border-green/30 bg-green/10 text-green',
+    red: 'border-red/30 bg-red/10 text-red',
+    amber: 'border-amber/30 bg-amber/10 text-amber',
+    blue: 'border-blue/30 bg-blue/10 text-blue',
+  }[tone];
+
+  return (
+    <span
+      className={`inline-flex items-center text-9px font-mono font-semibold px-1.75 py-px rounded-full border ${toneClass} ${className}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -217,7 +301,7 @@ export function ProgressBar({
 }) {
   return (
     <div
-      className={`h-[5px] flex-1 min-w-0 overflow-hidden rounded-[3px] border border-[var(--border)] bg-[var(--bg3)] ${className}`}
+      className={`h-1.25 flex-1 min-w-0 overflow-hidden rounded-[3px] border border-(--border) bg-(--bg3) ${className}`}
     >
       <div
         className="h-full rounded-[3px] transition-[width,background] duration-300"
@@ -247,12 +331,17 @@ export function ColorText({
 export function PillGroup({
   children,
   style,
+  className = '',
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
-    <div style={style} className="flex gap-0.5 bg-bg2 border border-border rounded-full p-0.5">
+    <div
+      style={style}
+      className={`flex gap-0.5 bg-bg2 border border-border rounded-full p-0.5 ${className}`}
+    >
       {children}
     </div>
   );
@@ -299,6 +388,7 @@ export function NumInput({
   min,
   max,
   style,
+  className = '',
 }: {
   value: string | number;
   onChange: (v: string) => void;
@@ -307,6 +397,7 @@ export function NumInput({
   min?: number;
   max?: number;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
     <input
@@ -329,6 +420,7 @@ export function NumInput({
         outline: 'none',
         ...style,
       }}
+      className={className}
     />
   );
 }
@@ -339,14 +431,16 @@ export function InputRow({
   label,
   children,
   style,
+  className = '',
 }: {
   label: string;
   children: React.ReactNode;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   return (
-    <div style={style} className="flex items-center gap-2 mb-2">
-      <span className="font-mono text-text2 flex-shrink-0" style={{ fontSize: 11, width: 80 }}>
+    <div style={style} className={`flex items-center gap-2 ${className || 'mb-2'}`}>
+      <span className="font-mono text-text2 shrink-0" style={{ fontSize: 11, width: 80 }}>
         {label}
       </span>
       {children}
@@ -372,6 +466,7 @@ export function ActionBtn({
   style,
   className = '',
   disabled = false,
+  type = 'button',
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -379,6 +474,7 @@ export function ActionBtn({
   style?: React.CSSProperties;
   className?: string;
   disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
 }) {
   const colorMap = {
     default: { color: 'var(--text2)', border: 'var(--border2)', bg: 'var(--bg3)' },
@@ -389,6 +485,7 @@ export function ActionBtn({
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       style={{
@@ -415,14 +512,12 @@ export const miniInputClass =
 
 export function pillToggleClass(active: boolean) {
   return `px-2 py-0.5 text-10px font-mono font-semibold rounded-full cursor-pointer border transition-all ${
-    active
-      ? 'border-accent bg-green-bg text-accent'
-      : 'border-border2 bg-bg3 text-text2'
+    active ? 'border-accent bg-green-bg text-accent' : 'border-border2 bg-bg3 text-text2'
   }`;
 }
 
 export const selectInputClass = `${settingsInputClass} cursor-pointer`;
-export const numInputClass = `${settingsInputClass} w-[72px]`;
+export const numInputClass = `${settingsInputClass} w-18`;
 export const fullInputClass = `${settingsInputClass} w-full`;
 export const sectionTitleClass =
   'text-10px font-mono font-bold text-text2 uppercase tracking-widest mb-2';
@@ -477,13 +572,7 @@ export function SettingsGroup({
   );
 }
 
-export function SettingsRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+export function SettingsRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border">
       <span className="text-xs font-mono text-text2">{label}</span>
@@ -503,9 +592,9 @@ export function ToggleSwitch({
   label?: string;
   size?: 'sm' | 'md';
 }) {
-  const dims = size === 'sm' ? 'w-9 h-5' : 'w-10 h-[22px]';
-  const knob = size === 'sm' ? 'w-3 h-3 top-[3px]' : 'w-4 h-4 top-[3px]';
-  const onLeft = size === 'sm' ? 'left-[17px]' : 'left-[21px]';
+  const dims = size === 'sm' ? 'w-9 h-5' : 'w-10 h-5.5';
+  const knob = size === 'sm' ? 'w-3 h-3 top-0.75' : 'w-4 h-4 top-0.75';
+  const onLeft = size === 'sm' ? 'left-4.25' : 'left-5.25';
 
   return (
     <button
@@ -520,7 +609,7 @@ export function ToggleSwitch({
     >
       <span
         className={`absolute ${knob} rounded-full bg-white transition-[left] duration-200 ${
-          on ? onLeft : 'left-[3px]'
+          on ? onLeft : 'left-0.75'
         }`}
       />
     </button>

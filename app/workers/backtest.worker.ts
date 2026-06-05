@@ -1,5 +1,11 @@
 /// <reference lib="webworker" />
 import { expose } from 'comlink';
+import {
+  calculateFee,
+  calculateFundingPayment,
+  resolveBracketExit,
+  resolveMarketEntry,
+} from '@/features/backtesting/services/orderSimulationService';
 import type { BacktestRequest, BacktestResult, BacktestTrade } from '@/lib/backtestTypes';
 import type { Candle } from '@/lib/indicators';
 
@@ -98,6 +104,15 @@ interface SignalSnapshot {
 
 function runBacktest(req: BacktestWorkerRequest): BacktestResult {
   const { candles, strategy, capital } = req;
+  const execution = {
+    latencyBars: req.execution?.latencyBars ?? 1,
+    slippageBps: req.execution?.slippageBps ?? 2,
+    feeRate: req.execution?.feeRate ?? 0.0005,
+    fundingRate8h: req.execution?.fundingRate8h ?? 0,
+    fundingIntervalHours: req.execution?.fundingIntervalHours ?? 8,
+    maxVolumeParticipationPct: req.execution?.maxVolumeParticipationPct ?? 10,
+    intrabarPolicy: req.execution?.intrabarPolicy ?? 'conservative',
+  } as const;
   const n = candles.length;
 
   const atrs = calcATR(candles, 14);
@@ -190,6 +205,24 @@ function runBacktest(req: BacktestWorkerRequest): BacktestResult {
   let mfe: number = 0;
   let trailStop: number | null = null;
 
+  const markToMarket = (candle: Candle): number => {
+    if (!inTrade || tradeEntry <= 0 || tradeSize <= 0) return equity;
+    const units = tradeSize / tradeEntry;
+    const unrealized =
+      tradeDir === 'long'
+        ? (candle.c - tradeEntry) * units
+        : (tradeEntry - candle.c) * units;
+    const accruedFunding = calculateFundingPayment({
+      direction: tradeDir,
+      notional: tradeSize,
+      entryTime: candles[tradeEntryIdx]?.t ?? candle.t,
+      exitTime: candle.t,
+      fundingRate: execution.fundingRate8h,
+      intervalHours: execution.fundingIntervalHours,
+    });
+    return equity + unrealized - accruedFunding;
+  };
+
   for (let i = 1; i < n; i++) {
     const c = candles[i];
 
@@ -203,17 +236,32 @@ function runBacktest(req: BacktestWorkerRequest): BacktestResult {
 
         if (tradeSize < 1) continue;
 
+        const entryFill = resolveMarketEntry({
+          candles,
+          signalIndex: i,
+          latencyBars: execution.latencyBars,
+          fallbackPrice: c.c,
+          direction: signal.dir,
+          slippageBps: execution.slippageBps,
+          orderNotional: tradeSize,
+          maxVolumeParticipationPct: execution.maxVolumeParticipationPct,
+        });
+        if (!entryFill) continue;
+        if (entryFill.fillRatio <= 0) continue;
+
         inTrade = true;
         tradeDir = signal.dir;
-        tradeEntry = c.c;
+        tradeEntry = entryFill.price;
         tradeStop = signal.stop;
         tradeTPs = signal.tp;
         tpHits = 0;
-        tradeEntryIdx = i;
+        tradeEntryIdx = entryFill.index;
+        tradeSize = entryFill.filledNotional > 0 ? entryFill.filledNotional : tradeSize;
         cumulRisk = riskDist;
         mae = 0;
         mfe = 0;
         trailStop = null;
+        i = entryFill.index;
       }
     } else {
       // MAE / MFE
@@ -238,52 +286,39 @@ function runBacktest(req: BacktestWorkerRequest): BacktestResult {
           ? Math.max(trailStop ?? trail, trail)
           : Math.min(trailStop ?? trail, trail);
 
-      let exitPrice: number | null = null;
-      let exitReason: 'tp1' | 'tp2' | 'tp3' | 'sl' | 'trail' | 'eod' = 'sl';
+      const exitFill = resolveBracketExit({
+        candle: c,
+        direction: tradeDir,
+        stopPrice: tradeStop,
+        takeProfitPrices: tradeTPs,
+        nextTakeProfitIndex: tpHits,
+        trailStopPrice: trailStop,
+        intrabarPolicy: execution.intrabarPolicy,
+        slippageBps: execution.slippageBps,
+      });
 
-      // TP1
-      if (tpHits === 0 && tradeTPs[0]) {
-        const hit = tradeDir === 'long' ? c.h >= tradeTPs[0] : c.l <= tradeTPs[0];
-        if (hit) {
-          exitPrice = tradeTPs[0];
-          exitReason = 'tp1';
-          tpHits = 1;
+      if (exitFill !== null) {
+        if (exitFill.takeProfitIndex !== undefined) {
+          tpHits = exitFill.takeProfitIndex + 1;
         }
-      }
-
-      // TP2
-      if (tpHits === 1 && tradeTPs[1]) {
-        const hit = tradeDir === 'long' ? c.h >= tradeTPs[1] : c.l <= tradeTPs[1];
-        if (hit) {
-          exitPrice = tradeTPs[1];
-          exitReason = 'tp2';
-        }
-      }
-
-      // SL
-      if (!exitPrice) {
-        const slHit = tradeDir === 'long' ? c.l <= tradeStop : c.h >= tradeStop;
-        if (slHit) {
-          exitPrice = tradeStop;
-          exitReason = 'sl';
-        }
-      }
-
-      // Trail SL
-      if (!exitPrice && trailStop !== null) {
-        const trailHit = tradeDir === 'long' ? c.l <= trailStop : c.h >= trailStop;
-        if (trailHit) {
-          exitPrice = trailStop;
-          exitReason = 'trail';
-        }
-      }
-
-      if (exitPrice !== null) {
+        const exitPrice = exitFill.price;
         const units = tradeSize / tradeEntry;
-        const pnl =
+        const grossPnl =
           tradeDir === 'long'
             ? (exitPrice - tradeEntry) * units
             : (tradeEntry - exitPrice) * units;
+        const entryFee = calculateFee(tradeSize, execution.feeRate);
+        const exitFee = calculateFee(exitPrice * units, execution.feeRate);
+        const funding = calculateFundingPayment({
+          direction: tradeDir,
+          notional: tradeSize,
+          entryTime: candles[tradeEntryIdx].t,
+          exitTime: c.t,
+          fundingRate: execution.fundingRate8h,
+          intervalHours: execution.fundingIntervalHours,
+        });
+        const fees = entryFee + exitFee;
+        const pnl = grossPnl - fees - funding;
         const r = cumulRisk > 0 ? pnl / (cumulRisk * units) : 0;
 
         trades.push({
@@ -295,8 +330,10 @@ function runBacktest(req: BacktestWorkerRequest): BacktestResult {
           size: tradeSize,
           pnl,
           pnlPct: (pnl / equity) * 100,
+          fees,
+          funding,
           r,
-          exitReason,
+          exitReason: exitFill.reason,
           mae,
           mfe,
           entryTime: candles[tradeEntryIdx].t,
@@ -309,9 +346,58 @@ function runBacktest(req: BacktestWorkerRequest): BacktestResult {
       }
     }
 
-    equityCurve[i] = equity;
+    const markedEquity = markToMarket(c);
+    equityCurve[i] = markedEquity;
+    if (markedEquity > peakEquity) peakEquity = markedEquity;
+    ddCurve[i] = peakEquity > 0 ? ((peakEquity - markedEquity) / peakEquity) * 100 : 0;
+  }
+
+  if (inTrade && n > 0) {
+    const exitIdx = n - 1;
+    const c = candles[exitIdx];
+    const units = tradeSize / tradeEntry;
+    const exitPrice = c.c;
+    const grossPnl =
+      tradeDir === 'long'
+        ? (exitPrice - tradeEntry) * units
+        : (tradeEntry - exitPrice) * units;
+    const entryFee = calculateFee(tradeSize, execution.feeRate);
+    const exitFee = calculateFee(exitPrice * units, execution.feeRate);
+    const funding = calculateFundingPayment({
+      direction: tradeDir,
+      notional: tradeSize,
+      entryTime: candles[tradeEntryIdx].t,
+      exitTime: c.t,
+      fundingRate: execution.fundingRate8h,
+      intervalHours: execution.fundingIntervalHours,
+    });
+    const fees = entryFee + exitFee;
+    const pnl = grossPnl - fees - funding;
+    const r = cumulRisk > 0 ? pnl / (cumulRisk * units) : 0;
+
+    trades.push({
+      dir: tradeDir,
+      entryIdx: tradeEntryIdx,
+      exitIdx,
+      entryPrice: tradeEntry,
+      exitPrice,
+      size: tradeSize,
+      pnl,
+      pnlPct: (pnl / equity) * 100,
+      fees,
+      funding,
+      r,
+      exitReason: 'eod',
+      mae,
+      mfe,
+      entryTime: candles[tradeEntryIdx].t,
+      exitTime: c.t,
+    });
+
+    equity += pnl;
+    equityCurve[exitIdx] = equity;
     if (equity > peakEquity) peakEquity = equity;
-    ddCurve[i] = peakEquity > 0 ? ((peakEquity - equity) / peakEquity) * 100 : 0;
+    ddCurve[exitIdx] = peakEquity > 0 ? ((peakEquity - equity) / peakEquity) * 100 : 0;
   }
 
   // ── Metrics ────────────────────────────────────────────────────────────────

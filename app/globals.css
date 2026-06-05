@@ -1,3 +1,4 @@
+@import 'tailwindcss';
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600&display=swap');
 
 :root {
@@ -202,14 +203,29 @@ html,
 body {
   height: 100%;
   -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top, rgba(0, 229, 160, 0.04), transparent 18%),
+    linear-gradient(180deg, #07090f 0%, var(--bg) 44%, #090c13 100%);
   color: var(--text);
   font-family: var(--sans);
   font-size: 13px;
   min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(0, 229, 160, 0.35);
+  outline-offset: 2px;
 }
 
 /* Scrollbar */

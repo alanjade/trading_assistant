@@ -63,6 +63,7 @@ export default function OnboardingView({
   current,
   pos,
   onNext,
+  onPrevious,
   onSkip,
 }: {
   step: number;
@@ -70,6 +71,7 @@ export default function OnboardingView({
   current: TooltipStep;
   pos: { top: number; left: number };
   onNext: () => void;
+  onPrevious: () => void;
   onSkip: () => void;
 }) {
   return (
@@ -77,6 +79,10 @@ export default function OnboardingView({
       <div className="fixed inset-0 z-[8000] bg-black/35 pointer-events-none" />
 
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        aria-describedby="onboarding-body"
         className="fixed z-[8001] w-[280px] bg-bg2 border border-accent rounded p-3.5 shadow-[0_8px_40px_rgba(0,0,0,0.5)] animate-onboard-in"
         style={{ top: pos.top, left: pos.left }}
       >
@@ -89,6 +95,7 @@ export default function OnboardingView({
           <button
             type="button"
             onClick={onSkip}
+            aria-label="Skip onboarding tour"
             className="text-9px font-mono text-text3 bg-transparent border-0 cursor-pointer hover:text-text2"
           >
             Skip tour
@@ -99,15 +106,28 @@ export default function OnboardingView({
           {Array.from({ length: total }).map((_, i) => (
             <div
               key={i}
+              aria-hidden="true"
               className={`h-0.5 flex-1 rounded-sm transition-colors ${i <= step ? 'bg-accent' : 'bg-bg4'}`}
             />
           ))}
         </div>
 
-        <div className="text-xs font-mono font-bold text-text mb-1.5">{current.title}</div>
-        <div className="text-11px font-mono text-text2 leading-relaxed mb-3.5">{current.body}</div>
+        <div id="onboarding-title" className="text-xs font-mono font-bold text-text mb-1.5">
+          {current.title}
+        </div>
+        <div id="onboarding-body" className="text-11px font-mono text-text2 leading-relaxed mb-3.5">
+          {current.body}
+        </div>
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex gap-2 justify-between">
+          <button
+            type="button"
+            onClick={onPrevious}
+            disabled={step === 0}
+            className="px-3 py-1.5 text-11px font-mono font-bold rounded-sm cursor-pointer border border-border2 bg-bg3 text-text2 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Back
+          </button>
           <button
             type="button"
             onClick={onNext}

@@ -332,21 +332,22 @@ export default function RRCard() {
       <InputRow label="Size ($)">
         <NumInput value={localSize} onChange={handleSizeChange} step={1} />
       </InputRow>
-      <InputRow label="Tokens" style={{ marginBottom: 4 }}>
+      <InputRow label="Tokens" className="mb-1">
         <NumInput value={localTokens} onChange={handleTokensChange} step={0.0001} placeholder="auto" />
       </InputRow>
       <p className="text-10px font-mono text-text3 mb-3 pl-24">Size ($) ÷ Entry = Tokens · edit either to sync</p>
 
-      <InputRow label="R:R Ratio" style={{ marginBottom: 6 }}>
+      <InputRow label="R:R Ratio" className="mb-1.5">
         <NumInput
           value={rrRatio}
           onChange={(v) => setRrRatio(parseFloat(v) || 2)}
           step={0.1}
           min={0.5}
           max={10}
-          style={{ width: 70, flex: 'none' }}
+          style={{ flex: 'none' }}
+          className="w-[70px]"
         />
-        <PillGroup style={{ flex: 1, marginLeft: 4 }}>
+        <PillGroup className="flex-1 ml-1">
           {RR_PRESETS.map((preset) => (
             <PillBtn key={preset} active={rrRatio === preset} onClick={() => setRrRatio(preset)}>
               1:{preset}
@@ -355,7 +356,7 @@ export default function RRCard() {
         </PillGroup>
       </InputRow>
 
-      <MetricGrid columns={3} style={{ marginBottom: 10 }}>
+      <MetricGrid columns={3} className="mb-2.5">
         <MetricBox
           label="Risk / unit"
           value={fmtPrice(r)}

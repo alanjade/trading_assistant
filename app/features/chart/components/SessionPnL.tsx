@@ -7,6 +7,7 @@ import {
   MetricBox,
   MetricGrid,
   PanelHeader,
+  ProgressBar,
   settingsInputClass,
 } from '@/components/ui';
 import {
@@ -20,8 +21,13 @@ import type { SessionTradeDraft } from '@/features/session/services/sessionPnLSe
 import { fmtPrice, fmtSymDisplay } from '@/lib/indicators';
 import { useStore } from '@/lib/store';
 
-function smBtnClass(_borderColor: string) {
-  return `px-2 py-0.5 text-10px font-mono font-semibold rounded-sm cursor-pointer border bg-transparent text-text2 transition-all`;
+function smBtnClass(active = false, danger = false) {
+  const tone = danger
+    ? 'border-red text-red'
+    : active
+      ? 'border-accent text-accent'
+      : 'border-border2 text-text2';
+  return `px-2 py-0.5 text-10px font-mono font-semibold rounded-sm cursor-pointer border bg-transparent transition-all ${tone}`;
 }
 
 export default function SessionPnL() {
@@ -69,7 +75,7 @@ export default function SessionPnL() {
   return (
     <>
       {dailyLossHit && !dailyLossBannerDismissed && (
-        <div className="sticky top-0 z-[500] px-4 py-2.5 bg-red/20 border border-red flex items-center gap-3 animate-[flashRed_1s_ease_infinite]">
+        <div className="sticky top-0 z-500 px-4 py-2.5 bg-red/20 border border-red flex items-center gap-3 animate-[flashRed_1s_ease_infinite]">
           <span className="text-lg">🛑</span>
           <span className="flex-1 text-xs font-mono font-bold text-red">
             DAILY LOSS LIMIT HIT — ${(-sessionPnL).toFixed(2)} lost · limit ${maxDailyLossUsd}
@@ -86,7 +92,7 @@ export default function SessionPnL() {
         </div>
       )}
 
-      <Card style={{ marginBottom: 10 }}>
+      <Card className="mb-2.5">
         <PanelHeader
           title="📊 Session P&L"
           actions={
@@ -94,11 +100,7 @@ export default function SessionPnL() {
               <button
                 type="button"
                 onClick={() => setShowForm((f) => !f)}
-                className={smBtnClass(showForm ? 'var(--accent)' : 'var(--border2)')}
-                style={{
-                  borderColor: showForm ? 'var(--accent)' : 'var(--border2)',
-                  color: showForm ? 'var(--accent)' : undefined,
-                }}
+                className={smBtnClass(showForm)}
               >
                 {showForm ? '✕ Cancel' : '+ Add Trade'}
               </button>
@@ -106,8 +108,7 @@ export default function SessionPnL() {
                 <button
                   type="button"
                   onClick={clearSessionTrades}
-                  className={smBtnClass('var(--red)')}
-                  style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
+                  className={smBtnClass(false, true)}
                 >
                   Clear
                 </button>
@@ -140,7 +141,7 @@ export default function SessionPnL() {
                 setMaxDailyLossUsd(parseSessionNumber(e.target.value));
                 setDailyLossBannerDismissed(false);
               }}
-              className={`${settingsInputClass} w-[90px]`}
+              className={`${settingsInputClass} w-22.5`}
             />
             {maxDailyLossUsd > 0 && (
               <span
@@ -153,19 +154,16 @@ export default function SessionPnL() {
             )}
           </div>
           {maxDailyLossUsd > 0 && (
-            <div className="h-[5px] rounded-sm bg-bg3 border border-border overflow-hidden">
-              <div
-                className="h-full rounded-sm transition-[width,background] duration-400"
-                style={{
-                  width: `${lossUsedPct}%`,
-                  background: dailyLossHit
-                    ? 'var(--red)'
-                    : dailyLossWarn
-                      ? 'var(--amber)'
-                      : 'var(--green)',
-                }}
-              />
-            </div>
+            <ProgressBar
+              value={lossUsedPct}
+              color={
+                dailyLossHit
+                  ? 'var(--red)'
+                  : dailyLossWarn
+                    ? 'var(--amber)'
+                    : 'var(--green)'
+              }
+            />
           )}
         </div>
 
@@ -222,7 +220,7 @@ export default function SessionPnL() {
               onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))}
               className={`${settingsInputClass} w-full bg-bg4 mb-2`}
             />
-            <ActionBtn variant="green" onClick={handleAdd} style={{ width: '100%' }}>
+            <ActionBtn variant="green" onClick={handleAdd} className="w-full">
               Add Trade
             </ActionBtn>
           </div>

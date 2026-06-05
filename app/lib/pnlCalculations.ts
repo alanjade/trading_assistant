@@ -76,7 +76,7 @@ export function calculateRealizedPnL(
  * @param entryPrice - Entry price per unit
  * @param exitPrice - Exit price per unit
  * @param units - Position size
- * @param makerFee - Maker fee rate (default 0.02%)
+ * @param _makerFee - Reserved maker fee rate (default 0.02%)
  * @param takerFee - Taker fee rate (default 0.05%)
  * @returns PnL after deducting entry and exit fees
  */
@@ -96,8 +96,8 @@ export function calculatePnLWithFees(
   const entryNotional = Math.abs(entryPrice * units);
   const exitNotional = Math.abs(exitPrice * units);
 
-  // Use maker fee for entry and taker fee for exit
-  const entryFee = entryNotional * _makerFee;
+  // Use taker fee on both sides as the conservative default for market exits.
+  const entryFee = entryNotional * takerFee;
   const exitFee = exitNotional * takerFee;
 
   return pnl - entryFee - exitFee;

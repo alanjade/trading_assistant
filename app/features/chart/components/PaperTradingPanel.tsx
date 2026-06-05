@@ -7,6 +7,7 @@ import {
   MetricBox,
   MetricGrid,
   PanelHeader,
+  StatusPill,
   pillToggleClass,
   settingsInputClass,
 } from '@/components/ui';
@@ -19,19 +20,12 @@ import {
 } from '@/lib/paperTrading';
 import { useStore } from '@/lib/store';
 import { PRESET_STRATEGIES } from '@/lib/strategy';
+import { STATUS_BADGE_CLASS, STATUS_PILL_CLASS } from '@/lib/uiConstants';
 
 function pnlTextClass(v: number) {
   return v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-text2';
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  open: 'text-blue border-blue/30 bg-blue/10',
-  closed_tp: 'text-green border-green/30 bg-green/10',
-  closed_sl: 'text-red border-red/30 bg-red/10',
-  closed_be: 'text-amber border-amber/30 bg-amber/10',
-  closed_trail: 'text-amber border-amber/30 bg-amber/10',
-  closed_manual: 'text-text2 border-border2 bg-bg3/50',
-};
 
 function PriceCell({
   label,
@@ -154,7 +148,7 @@ export default function PaperTradingPanel() {
           return rd > 0 ? livePnl / (rd * units) : 0;
         })()
       : calcRMultiple(pos);
-    const badgeClass = STATUS_BADGE[pos.status] ?? STATUS_BADGE.closed_manual;
+    const badgeClass = STATUS_BADGE_CLASS[pos.status as keyof typeof STATUS_BADGE_CLASS] ?? STATUS_BADGE_CLASS.closed_manual;
 
     return (
       <div
@@ -167,11 +161,9 @@ export default function PaperTradingPanel() {
           >
             {isLong ? '▲' : '▼'} {fmtSymDisplay(pos.sym)}
           </span>
-          <span
-            className={`text-9px font-mono px-1.75 py-px rounded-full border ${badgeClass}`}
-          >
+          <StatusPill tone={pos.status === 'open' ? 'blue' : pos.status.startsWith('closed_') ? 'green' : 'neutral'} className={badgeClass}>
             {STATUS_LABEL[pos.status]}
-          </span>
+          </StatusPill>
           <span className="text-9px font-mono text-text3 ml-auto">{pos.strategyName}</span>
         </div>
 
@@ -193,7 +185,7 @@ export default function PaperTradingPanel() {
           {pos.tpLevels.map((tp, i) => (
             <div
               key={i}
-              className={`text-9px font-mono px-1.75 py-0.5 rounded-md border ${
+              className={`${STATUS_PILL_CLASS} py-0.5 rounded-md border ${
                 tp.hit
                   ? 'border-green bg-green/10 text-green'
                   : 'border-border2 text-text3'
@@ -323,7 +315,7 @@ export default function PaperTradingPanel() {
           onBlur={(e) =>
             useStore.getState().resetPaperAccount(parseFloat(e.target.value) || 10000)
           }
-          className={`w-[90px] ${settingsInputClass}`}
+          className={`w-22.5 ${settingsInputClass}`}
         />
         <button
           type="button"

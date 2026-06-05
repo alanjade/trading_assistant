@@ -145,7 +145,7 @@ function EquityChart({ result }: { result: BacktestResult }) {
   );
 
   return (
-    <canvas ref={ref} className="w-full h-[140px] block rounded-sm" />
+    <canvas ref={ref} className="w-full h-35 block rounded-sm" />
   );
 }
 
@@ -194,7 +194,7 @@ function MonthlyChart({ monthly }: { monthly: MonthlyStats[] }) {
   );
 
   return (
-    <canvas ref={ref} className="w-full h-[100px] block rounded-sm" />
+    <canvas ref={ref} className="w-full h-25 block rounded-sm" />
   );
 }
 
@@ -314,7 +314,7 @@ function MAEMFEScatter({ trades }: { trades: BacktestTrade[] }) {
   );
 
   return (
-    <canvas ref={ref} className="w-full h-[90px] block rounded-sm" />
+    <canvas ref={ref} className="w-full h-22.5 block rounded-sm" />
   );
 }
 
@@ -371,7 +371,7 @@ function RDistChart({ trades }: { trades: BacktestTrade[] }) {
   );
 
   return (
-    <canvas ref={ref} className="w-full h-[70px] block rounded-sm" />
+    <canvas ref={ref} className="w-full h-17.5 block rounded-sm" />
   );
 }
 
@@ -385,6 +385,8 @@ function downloadCSV(result: BacktestResult) {
     'Entry',
     'Exit',
     'Size',
+    'Fees',
+    'Funding',
     'PnL',
     'PnL%',
     'R',
@@ -400,6 +402,8 @@ function downloadCSV(result: BacktestResult) {
     t.entryPrice.toFixed(4),
     t.exitPrice.toFixed(4),
     t.size.toFixed(2),
+    (t.fees ?? 0).toFixed(4),
+    (t.funding ?? 0).toFixed(4),
     t.pnl.toFixed(2),
     t.pnlPct.toFixed(2),
     t.r.toFixed(2),
@@ -469,7 +473,9 @@ export default function BacktestPanel() {
     if (workerRef.current) {
       workerRef.current.terminate();
     }
-    const worker = new Worker('/backtest.worker.js');
+    const worker = new Worker(new URL('@/workers/backtest.worker.ts', import.meta.url), {
+      type: 'module',
+    });
     const BacktestWorker = wrap<BacktestWorker>(worker);
 
     BacktestWorker.runBacktest({

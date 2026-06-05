@@ -216,7 +216,7 @@ export default memo(function FuturesCard() {
         </p>
       )}
 
-      <MetricGrid columns={2} style={{ marginBottom: 10 }}>
+      <MetricGrid columns={2} className="mb-2.5">
         <MetricBox
           label="Position Size"
           value={'$' + (useRes.positionSize ?? posSize).toFixed(0)}

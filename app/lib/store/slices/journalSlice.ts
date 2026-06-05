@@ -3,10 +3,11 @@
 //  Trade journal management and persistence
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { idbDeleteTrade, idbGetAllTrades, idbPutTrade, idbReplaceTrades } from '../../journalDb';
 import { splitCsvLine } from '../helpers';
-import type { JournalSlice, JournalSliceCreator, TradeJournalEntry, StoreState } from '../types';
+import type { JournalSlice, JournalSliceCreator, StoreState, TradeJournalEntry } from '../types';
 import type { StateCreator } from 'zustand';
+import { tradeStorage } from '@/features/market/services/storageService';
+import { enqueueOptimisticUpdate } from '@/lib/syncEngine';
 
 const defaultJournal: JournalSlice = {
   trades: [],
@@ -16,7 +17,10 @@ const defaultJournal: JournalSlice = {
 //  Slice Creator
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const createJournalSlice: StateCreator<StoreState, [], [], JournalSliceCreator> = (set, get) => ({
+export const createJournalSlice: StateCreator<StoreState, [], [], JournalSliceCreator> = (
+  set,
+  get
+) => ({
   ...defaultJournal,
 
   addTrade: (t: Omit<TradeJournalEntry, 'id'>) => {
@@ -28,7 +32,10 @@ export const createJournalSlice: StateCreator<StoreState, [], [], JournalSliceCr
       screenshotUrl: t.screenshotUrl ?? '',
     };
     set((s: StoreState) => ({ trades: [...s.trades, trade] }));
-    idbPutTrade(trade).catch(console.error);
+    enqueueOptimisticUpdate({ entity: 'journal', action: 'create', payload: trade }).catch(
+      console.error
+    );
+    tradeStorage.saveTrade(trade).catch(console.error);
   },
 
   updateTrade: (id: string, updates: Partial<TradeJournalEntry>) => {
@@ -37,22 +44,28 @@ export const createJournalSlice: StateCreator<StoreState, [], [], JournalSliceCr
         t.id === id ? { ...t, ...updates } : t
       );
       const updated = trades.find((t: TradeJournalEntry) => t.id === id);
-      if (updated) idbPutTrade(updated).catch(console.error);
+      if (updated) {
+        enqueueOptimisticUpdate({ entity: 'journal', action: 'update', payload: updated }).catch(
+          console.error
+        );
+        tradeStorage.saveTrade(updated).catch(console.error);
+      }
       return { trades };
     });
   },
 
   deleteTrade: (id: string) => {
     set((s: StoreState) => ({ trades: s.trades.filter((t: TradeJournalEntry) => t.id !== id) }));
-    idbDeleteTrade(id).catch(console.error);
+    enqueueOptimisticUpdate({ entity: 'journal', action: 'delete', payload: { id } }).catch(
+      console.error
+    );
+    tradeStorage.deleteTrade(id).catch(console.error);
   },
 
   hydrateTradesFromIdb: async () => {
     try {
-      const trades = await idbGetAllTrades();
-      if (trades && trades.length > 0) {
-        set({ trades });
-      }
+      const trades = await tradeStorage.getAllTrades();
+      set({ trades });
     } catch (e) {
       console.error('hydrateTradesFromIdb failed:', e);
     }
@@ -96,14 +109,22 @@ export const createJournalSlice: StateCreator<StoreState, [], [], JournalSliceCr
 
     if (mode === 'replace') {
       set({ trades: parsed });
-      await idbReplaceTrades(parsed);
+      enqueueOptimisticUpdate({ entity: 'journal', action: 'replace', payload: parsed }).catch(
+        console.error
+      );
+      await tradeStorage.replaceTrades(parsed);
     } else {
+      let merged: TradeJournalEntry[] = [];
       set((s: StoreState) => {
         const existing = new Set(s.trades.map((t: TradeJournalEntry) => t.id));
         const toAdd = parsed.filter((t) => !existing.has(t.id));
-        return { trades: [...s.trades, ...toAdd] };
+        merged = [...s.trades, ...toAdd];
+        return { trades: merged };
       });
-      await Promise.all(parsed.map((t) => idbPutTrade(t)));
+      enqueueOptimisticUpdate({ entity: 'journal', action: 'replace', payload: merged }).catch(
+        console.error
+      );
+      await tradeStorage.replaceTrades(merged);
     }
     return { count, errors };
   },

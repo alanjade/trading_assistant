@@ -145,7 +145,7 @@ function EquityCurve({ trades }: { trades: TradeJournalEntry[] }) {
     [equity.join(',')]
   );
 
-  return <canvas ref={ref} className="w-full h-[100px] block rounded-sm" />;
+  return <canvas ref={ref} className="w-full h-25 block rounded-sm" />;
 }
 
 // ── Win rate by symbol bar chart ──────────────────────────────────────────────
@@ -197,7 +197,7 @@ function WinBySymbol({ trades }: { trades: TradeJournalEntry[] }) {
     [entries.map((e) => e.sym + e.wr).join(',')]
   );
 
-  return <canvas ref={ref} className="w-full h-[90px] block rounded-sm" />;
+  return <canvas ref={ref} className="w-full h-22.5 block rounded-sm" />;
 }
 
 // ── Win rate by hour of day ───────────────────────────────────────────────────
@@ -259,7 +259,7 @@ function WinByHour({ trades }: { trades: TradeJournalEntry[] }) {
     [JSON.stringify(byDay)]
   );
 
-  return <canvas ref={ref} className="w-full h-[90px] block rounded-sm" />;
+  return <canvas ref={ref} className="w-full h-22.5 block rounded-sm" />;
 }
 
 // ── P&L by day of week ────────────────────────────────────────────────────────
@@ -303,7 +303,7 @@ function PnLByDay({ trades }: { trades: TradeJournalEntry[] }) {
     [byDay.join(',')]
   );
 
-  return <canvas ref={ref} className="w-full h-[80px] block rounded-sm" />;
+  return <canvas ref={ref} className="w-full h-20 block rounded-sm" />;
 }
 
 // ── Avg RR achieved vs planned ────────────────────────────────────────────────
@@ -377,7 +377,7 @@ function RRChart({ trades }: { trades: TradeJournalEntry[] }) {
     [pts.map((p) => p.planned + p.achieved).join(',')]
   );
 
-  return <canvas ref={ref} className="w-full h-[100px] block rounded-sm" />;
+  return <canvas ref={ref} className="w-full h-25 block rounded-sm" />;
 }
 
 // ── Tag selector ──────────────────────────────────────────────────────────────
@@ -692,7 +692,7 @@ export default function TradeLog() {
           <select
             value={importMode}
             onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
-            className={`${selectInputClass} w-[90px] py-1 px-1.5 text-10px`}
+            className={`${selectInputClass} w-22.5 py-1 px-1.5 text-10px`}
           >
             <option value="merge">Merge</option>
             <option value="replace">Replace</option>
@@ -742,7 +742,7 @@ export default function TradeLog() {
           value={fSymbol}
           onChange={(e) => setFSymbol(e.target.value)}
           placeholder="Symbol…"
-          className={`${filterInputClass} w-[110px]`}
+          className={`${filterInputClass} w-27.5`}
         />
         <input
           type="date"
@@ -1011,7 +1011,7 @@ export default function TradeLog() {
                           {fmtSymDisplay(trade.symbol)}
                         </span>
                         <span
-                          className={`text-9px font-mono font-bold px-1.5 py-0.25 rounded ${
+                          className={`text-9px font-mono font-bold px-1.5 py-px rounded ${
                             trade.dir === 'long'
                               ? 'text-green bg-green-bg'
                               : 'text-red bg-red-bg'
@@ -1023,7 +1023,7 @@ export default function TradeLog() {
                           @ {fmtPrice(trade.entry)}
                         </span>
                         <span
-                          className={`text-10px font-mono font-bold px-1.75 py-0.25 rounded ${outcomeBadge}`}
+                          className={`text-10px font-mono font-bold px-1.75 py-px rounded ${outcomeBadge}`}
                         >
                           {trade.outcome.toUpperCase()}
                         </span>
@@ -1038,7 +1038,7 @@ export default function TradeLog() {
                           {(trade.tags ?? []).map((tag) => (
                             <span
                               key={tag}
-                              className="text-8px font-mono px-1.5 py-0.25 rounded-lg bg-green/8 text-accent border border-green/20"
+                              className="text-8px font-mono px-1.5 py-px rounded-lg bg-green/8 text-accent border border-green/20"
                             >
                               {tag}
                             </span>

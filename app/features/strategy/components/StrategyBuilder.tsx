@@ -178,7 +178,7 @@ function RuleRow({
       <select
         value={(rule.left as { type: 'indicator'; id: IndicatorId }).id}
         onChange={(e) => setLeft(e.target.value as IndicatorId)}
-        className={`${selectInputClass} flex-1 min-w-[110px]`}
+        className={`${selectInputClass} flex-1 min-w-27.5`}
       >
         {INDICATOR_IDS.map((id) => (
           <option key={id} value={id}>
@@ -191,7 +191,7 @@ function RuleRow({
       <select
         value={rule.condition}
         onChange={(e) => setCond(e.target.value as Condition)}
-        className={`${selectInputClass} min-w-[110px]`}
+        className={`${selectInputClass} min-w-27.5`}
       >
         {(Object.entries(CONDITION_LABELS) as [Condition, string][]).map(([c, lbl]) => (
           <option key={c} value={c}>
@@ -227,7 +227,7 @@ function RuleRow({
         <select
           value={rightIndId}
           onChange={(e) => setRightIndicator(e.target.value as IndicatorId)}
-          className={`${selectInputClass} flex-1 min-w-[110px]`}
+          className={`${selectInputClass} flex-1 min-w-27.5`}
         >
           {INDICATOR_IDS.map((id) => (
             <option key={id} value={id}>
@@ -342,7 +342,7 @@ function EntryConditionEditor({
             onChange={(e) =>
               onChange({ ...cond, filters: { ...cond.filters!, minADX: +e.target.value } })
             }
-            className={`${numInputClass} w-[50px]`}
+            className={`${numInputClass} w-12.5`}
           />
         </label>
         <label className="flex items-center gap-1.25 text-10px font-mono text-text2 cursor-pointer">
@@ -446,7 +446,7 @@ function StopEditor({ stop, onChange }: { stop: StopConfig; onChange: (s: StopCo
               min={0.1}
               step={0.1}
               onChange={(e) => onChange({ ...stop, trailValue: +e.target.value })}
-              className={`${numInputClass} w-[55px]`}
+              className={`${numInputClass} w-13.75`}
             />
           </div>
         </div>
@@ -488,7 +488,7 @@ function TakeProfitEditor({
 
       {tp.targets.map((t, i) => (
         <div key={i} className={ruleRowClass}>
-          <span className="text-10px font-mono text-text3 w-[30px] shrink-0">TP{i + 1}</span>
+          <span className="text-10px font-mono text-text3 w-7.5 shrink-0">TP{i + 1}</span>
           <div className="flex items-center gap-1">
             <span className="text-10px font-mono text-text3">1:</span>
             <input
@@ -497,7 +497,7 @@ function TakeProfitEditor({
               min={0.5}
               step={0.1}
               onChange={(e) => updateTarget(i, 'rrMultiple', +e.target.value)}
-              className={`${numInputClass} w-[55px]`}
+              className={`${numInputClass} w-13.75`}
             />
           </div>
           <div className="flex items-center gap-1">
@@ -508,7 +508,7 @@ function TakeProfitEditor({
               max={100}
               step={5}
               onChange={(e) => updateTarget(i, 'sizePercent', +e.target.value)}
-              className={`${numInputClass} w-[55px]`}
+              className={`${numInputClass} w-13.75`}
             />
             <span className="text-10px font-mono text-text3">%</span>
           </div>

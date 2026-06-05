@@ -5,6 +5,17 @@ export interface BacktestRequest {
   candles: Candle[];
   strategy: Strategy;
   capital: number;
+  execution?: BacktestExecutionConfig;
+}
+
+export interface BacktestExecutionConfig {
+  latencyBars?: number;
+  slippageBps?: number;
+  feeRate?: number;
+  fundingRate8h?: number;
+  fundingIntervalHours?: number;
+  maxVolumeParticipationPct?: number;
+  intrabarPolicy?: 'conservative' | 'optimistic';
 }
 
 export interface BacktestTrade {
@@ -16,6 +27,8 @@ export interface BacktestTrade {
   size: number;
   pnl: number;
   pnlPct: number;
+  fees?: number;
+  funding?: number;
   r: number;
   exitReason: 'tp1' | 'tp2' | 'tp3' | 'sl' | 'trail' | 'eod';
   mae: number;

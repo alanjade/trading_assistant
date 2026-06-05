@@ -29,7 +29,6 @@ export const useStore = create<StoreState>()(
     {
       name: 'trading_assistant',
       partialize: (s) => ({
-        trades: s.trades,
         theme: s.theme,
         defaultSym: s.defaultSym,
         defaultTf: s.defaultTf,
@@ -45,7 +44,6 @@ export const useStore = create<StoreState>()(
         rrRatio: s.rrRatio,
         activeIndicators: s.activeIndicators,
         indicatorParams: s.indicatorParams,
-        strategies: s.strategies,
         activeStrategyId: s.activeStrategyId,
         chartDrawings: s.chartDrawings,
         atrTrailMult: s.atrTrailMult,

@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import OnboardingView, { type TooltipStep } from './OnboardingView';
@@ -23,6 +23,13 @@ const STEPS: TooltipStep[] = [
     target: '[data-onboard="indicators-btn"]',
     title: 'Indicator Panel',
     body: 'Toggle and configure any indicator. Each has adjustable parameters saved between sessions.',
+    placement: 'bottom',
+  },
+  {
+    id: 'chart-gestures',
+    target: '[data-onboard="candle-chart"]',
+    title: 'Chart Gestures',
+    body: 'Pinch or Ctrl-scroll to zoom. Swipe horizontally to review older candles, and double-tap the chart to snap back live.',
     placement: 'bottom',
   },
   {
@@ -69,7 +76,11 @@ function useOnboarding() {
     else setStep(nextStep);
   };
 
-  return { step, visible, next, skip: finish, finish, total: STEPS.length };
+  const previous = () => {
+    setStep((current) => (current === null ? 0 : Math.max(0, current - 1)));
+  };
+
+  return { step, visible, next, previous, skip: finish, finish, total: STEPS.length };
 }
 
 function getPosition(
@@ -112,10 +123,8 @@ function getPosition(
   }
 }
 
-
-
 export default function Onboarding() {
-  const { step, visible, next, skip, total } = useOnboarding();
+  const { step, visible, next, previous, skip, total } = useOnboarding();
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 80, left: 20 });
 
@@ -136,9 +145,8 @@ export default function Onboarding() {
     const target = document.querySelector(current.target);
     if (target) {
       const el = target as HTMLElement;
-      el.style.outline = '2px solid var(--accent)';
-      el.style.outlineOffset = '3px';
-      el.style.borderRadius = '4px';
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      el.setAttribute('data-onboard-active', 'true');
     }
 
     window.addEventListener('scroll', updatePos, true);
@@ -157,11 +165,30 @@ export default function Onboarding() {
       ro?.disconnect();
       if (target) {
         const el = target as HTMLElement;
-        el.style.outline = '';
-        el.style.outlineOffset = '';
+        el.removeAttribute('data-onboard-active');
       }
     };
   }, [current, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        skip();
+      } else if (event.key === 'Enter' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        next();
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        previous();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [next, previous, skip, visible]);
 
   if (!visible || !current || step === null) return null;
 
@@ -173,6 +200,7 @@ export default function Onboarding() {
         current={current}
         pos={pos}
         onNext={next}
+        onPrevious={previous}
         onSkip={skip}
       />
     </div>

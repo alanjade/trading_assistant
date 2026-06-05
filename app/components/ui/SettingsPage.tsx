@@ -5,6 +5,7 @@ import { ActionBtn } from '@/components/ui';
 import { resetOnboarding } from '@/components/ui/Onboarding';
 import { useTheme } from '@/components/ui/ThemeToggle';
 import { toast } from '@/components/ui/Toast';
+import { resolveStateConflict } from '@/lib/conflictResolution';
 import { downloadStateJSON, openImportFilePicker, type ParseResult } from '@/lib/stateIO';
 import { useStore } from '@/lib/store';
 import {
@@ -16,9 +17,9 @@ import {
 } from '@/lib/supabase';
 
 const inp =
-  'px-2.5 py-1.5 text-11px font-mono bg-bg3 text-text border border-border2 rounded-sm outline-none w-[110px]';
-const inpWide = `${inp} w-[200px]`;
-const inpNarrow = `${inp} w-[90px]`;
+  'px-2.5 py-1.5 text-11px font-mono bg-bg3 text-text border border-border2 rounded-sm outline-none w-27.5';
+const inpWide = `${inp} w-50`;
+const inpNarrow = `${inp} w-22.5`;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -63,8 +64,8 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
       }`}
     >
       <span
-        className={`absolute top-[3px] w-3 h-3 rounded-full transition-[left] duration-200 ${
-          on ? 'left-[17px] bg-black' : 'left-[3px] bg-text3'
+        className={`absolute top-0.75 w-3 h-3 rounded-full transition-[left] duration-200 ${
+          on ? 'left-4.25 bg-black' : 'left-0.75 bg-text3'
         }`}
       />
     </button>
@@ -116,7 +117,12 @@ export default function SettingsPage() {
     }
     const state = res.data.state;
     if (state) {
-      useStore.setState(state as Partial<ReturnType<typeof useStore.getState>>);
+      const resolved = resolveStateConflict(
+        useStore.getState() as Partial<Record<keyof typeof state, unknown>>,
+        state,
+        res.data.exportedAt
+      );
+      useStore.setState(resolved.state as Partial<ReturnType<typeof useStore.getState>>);
       setCloudStatus(`✓ Pulled state from ${res.data.exportedAt ?? 'cloud'}`);
       toast.success('State pulled from cloud');
     }
@@ -171,7 +177,7 @@ export default function SettingsPage() {
   const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
   return (
-    <div className="max-w-[620px] mx-auto py-1 pb-10">
+    <div className="max-w-155 mx-auto py-1 pb-10">
       <Section title="Appearance">
         <Row label="Theme" hint="Toggle between dark and light mode">
           <ActionBtn onClick={toggleTheme} className="flex items-center gap-1.5">
@@ -325,9 +331,7 @@ export default function SettingsPage() {
                   {cloudLoading ? 'Sending…' : 'Send Magic Link'}
                 </ActionBtn>
               </div>
-              {cloudStatus && (
-                <p className="text-10px font-mono text-text2">{cloudStatus}</p>
-              )}
+              {cloudStatus && <p className="text-10px font-mono text-text2">{cloudStatus}</p>}
             </div>
           ) : (
             <div>
