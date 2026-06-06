@@ -14,7 +14,7 @@ import {
   makeTrendLine,
   TOOL_DEFAULTS,
 } from '@/lib/drawingTools';
-import { fmtK, fmtPrice } from '@/lib/indicators';
+import { fmtFixed, fmtK, fmtPrice, isFiniteNumber } from '@/lib/indicators';
 import {
   calcAutoFibo,
   calcMTFConfluence,
@@ -710,23 +710,45 @@ export default function CandleChart() {
       const cw = cW / n;
       let pMin = Math.min(...visCandles.map((c) => c.l));
       let pMax = Math.max(...visCandles.map((c) => c.h));
+
+      const includePrice = (value: number | null | undefined) => {
+        if (!isFiniteNumber(value)) return;
+        pMin = Math.min(pMin, value);
+        pMax = Math.max(pMax, value);
+      };
+      const includeSeries = (series: (number | null | undefined)[]) => {
+        series.slice(visOffset, visEndOffset).forEach(includePrice);
+      };
+
+      if (activeIndicators.ema9) includeSeries(e9s);
+      if (activeIndicators.ema20) includeSeries(e20s);
+      if (activeIndicators.ema50) includeSeries(e50s);
+      if (activeIndicators.vwap) includeSeries(vwapVals);
+      if (activeIndicators.vwap && activeIndicators.vwapBands) {
+        includeSeries(vwapUpper1);
+        includeSeries(vwapLower1);
+        includeSeries(vwapUpper2);
+        includeSeries(vwapLower2);
+      }
       if (activeIndicators.bb) {
-        bbUpper.slice(visOffset, visEndOffset).forEach((v) => {
-          if (v) pMax = Math.max(pMax, v);
-        });
-        bbLower.slice(visOffset, visEndOffset).forEach((v) => {
-          if (v) pMin = Math.min(pMin, v);
-        });
+        includeSeries(bbUpper);
+        includeSeries(bbMiddle);
+        includeSeries(bbLower);
+      }
+      if (activeIndicators.superTrend) includeSeries(stVals);
+      if (activeIndicators.psar) includeSeries(psarVals);
+      if (suggestion?.entry && suggestion?.stop) {
+        includePrice(suggestion.entry);
+        includePrice(suggestion.stop);
+        includePrice(suggestion.target);
       }
       if (fiboOverlay) {
         fiboOverlay.levels.forEach((l) => {
-          pMin = Math.min(pMin, l.price);
-          pMax = Math.max(pMax, l.price);
+          includePrice(l.price);
         });
       }
       if (livePrice > 0) {
-        pMin = Math.min(pMin, livePrice);
-        pMax = Math.max(pMax, livePrice);
+        includePrice(livePrice);
       }
       const pad = (pMax - pMin) * CHART.pricePadPct || pMax * 0.001;
       const plo = pMin - pad,
@@ -738,9 +760,28 @@ export default function CandleChart() {
     },
     [
       visCandles,
+      activeIndicators.ema9,
+      activeIndicators.ema20,
+      activeIndicators.ema50,
+      activeIndicators.vwap,
+      activeIndicators.vwapBands,
       activeIndicators.bb,
+      activeIndicators.superTrend,
+      activeIndicators.psar,
+      e9s,
+      e20s,
+      e50s,
+      vwapVals,
+      vwapUpper1,
+      vwapLower1,
+      vwapUpper2,
+      vwapLower2,
       bbUpper,
+      bbMiddle,
       bbLower,
+      stVals,
+      psarVals,
+      suggestion,
       visOffset,
       visEndOffset,
       fiboOverlay,
@@ -1819,7 +1860,7 @@ export default function CandleChart() {
         fmt?: (v: number) => string
       ) => {
         const v = arr[absIdx];
-        if (v != null) rows.push([label, fmt ? fmt(v as number) : fmtPrice(v as number), color]);
+        if (isFiniteNumber(v)) rows.push([label, fmt ? fmt(v) : fmtPrice(v), color]);
       };
       if (activeIndicators.vwap) maybeAdd('VWAP', vwapVals, COL.vwap);
       if (activeIndicators.ema9) maybeAdd('E9', e9s, COL.ema9);
@@ -1835,30 +1876,30 @@ export default function CandleChart() {
       if (activeIndicators.psar) maybeAdd('PSAR', psarVals, COL.psar);
       if (activeIndicators.rsi) maybeAdd('RSI', rsiVals, COL.rsi, (v) => String(Math.round(v)));
       if (activeIndicators.macd) {
-        maybeAdd('MACD', macdLine, COL.macdLine, (v) => v.toFixed(4));
-        maybeAdd('Sig', macdSignal, COL.macdSig, (v) => v.toFixed(4));
-        maybeAdd('Hist', macdHist, undefined, (v) => v.toFixed(4));
+        maybeAdd('MACD', macdLine, COL.macdLine, (v) => fmtFixed(v, 4));
+        maybeAdd('Sig', macdSignal, COL.macdSig, (v) => fmtFixed(v, 4));
+        maybeAdd('Hist', macdHist, undefined, (v) => fmtFixed(v, 4));
       }
       if (activeIndicators.stochRsi) {
-        maybeAdd('SK', stochRsiK, COL.stochK, (v) => v.toFixed(1));
-        maybeAdd('SD', stochRsiD, COL.stochD, (v) => v.toFixed(1));
+        maybeAdd('SK', stochRsiK, COL.stochK, (v) => fmtFixed(v, 1));
+        maybeAdd('SD', stochRsiD, COL.stochD, (v) => fmtFixed(v, 1));
       }
       if (activeIndicators.adx) {
-        maybeAdd('ADX', adxVals, COL.adx, (v) => v.toFixed(1));
-        maybeAdd('+DI', plusDI, COL.plusDI, (v) => v.toFixed(1));
-        maybeAdd('-DI', minusDI, COL.minusDI, (v) => v.toFixed(1));
+        maybeAdd('ADX', adxVals, COL.adx, (v) => fmtFixed(v, 1));
+        maybeAdd('+DI', plusDI, COL.plusDI, (v) => fmtFixed(v, 1));
+        maybeAdd('-DI', minusDI, COL.minusDI, (v) => fmtFixed(v, 1));
       }
-      if (activeIndicators.williamsR) maybeAdd('%R', willRVals, COL.willR, (v) => v.toFixed(1));
-      if (activeIndicators.cci) maybeAdd('CCI', cciVals, COL.cci, (v) => v.toFixed(1));
+      if (activeIndicators.williamsR) maybeAdd('%R', willRVals, COL.willR, (v) => fmtFixed(v, 1));
+      if (activeIndicators.cci) maybeAdd('CCI', cciVals, COL.cci, (v) => fmtFixed(v, 1));
       if (activeIndicators.obv) maybeAdd('OBV', obvVals, COL.obv, fmtK);
       if (activeIndicators.cvd) {
         const bd = cvdBarDeltas[absIdx],
           cd = cvdCumDeltas[absIdx];
-        if (bd != null)
+        if (isFiniteNumber(bd))
           rows.push(['ΔVol', (bd >= 0 ? '+' : '') + fmtK(bd), bd >= 0 ? COL.bull : COL.bear]);
-        if (cd != null) rows.push(['CVD', (cd >= 0 ? '+' : '') + fmtK(cd), COL.cvdLine]);
+        if (isFiniteNumber(cd)) rows.push(['CVD', (cd >= 0 ? '+' : '') + fmtK(cd), COL.cvdLine]);
       }
-      if (atrVals?.[absIdx] != null) maybeAdd('ATR', atrVals, '#ffb82e', (v) => v.toFixed(4));
+      if (atrVals?.[absIdx] != null) maybeAdd('ATR', atrVals, '#ffb82e', (v) => fmtFixed(v, 4));
       if (fiboOverlay) {
         const nearest = fiboEntryScore(c.c, fiboOverlay, atrVals[absIdx] ?? null);
         if (nearest.nearestLabel) rows.push(['Fib', nearest.nearestLabel, '#a78bff']);
@@ -2169,11 +2210,17 @@ export default function CandleChart() {
     };
   }, [scheduleRedrawAll, cancelScheduledFrames]);
 
+  useEffect(() => {
+    if (!containerRef.current || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => scheduleRedrawAll());
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [scheduleRedrawAll]);
+
   // ── Derived display values ─────────────────────────────────────────────────
-  const latestRSI = useMemo(
-    () => rsiVals.filter((v) => v !== null).slice(-1)[0] as number | undefined,
-    [rsiVals]
-  );
+  const latestRSI = useMemo(() => rsiVals.filter(isFiniteNumber).slice(-1)[0], [rsiVals]);
   const rsiColor =
     latestRSI !== undefined
       ? latestRSI > 70
@@ -2182,19 +2229,16 @@ export default function CandleChart() {
           ? COL.bull
           : COL.rsi
       : COL.rsi;
-  const latestVWAP = useMemo(
-    () => vwapVals.filter((v) => v != null).slice(-1)[0] as number | undefined,
-    [vwapVals]
-  );
+  const latestVWAP = useMemo(() => vwapVals.filter(isFiniteNumber).slice(-1)[0], [vwapVals]);
+  const vwapDisplay =
+    latestVWAP != null
+      ? fmtPrice(latestVWAP)
+      : allCandles.length
+        ? 'Calculating...'
+        : 'Waiting For Data';
   const latesTCVD = useMemo(() => cvdCumDeltas[cvdCumDeltas.length - 1], [cvdCumDeltas]);
-  const latestMACD = useMemo(
-    () => macdLine.filter((v) => v != null).slice(-1)[0] as number | undefined,
-    [macdLine]
-  );
-  const latestADX = useMemo(
-    () => adxVals.filter((v) => v != null).slice(-1)[0] as number | undefined,
-    [adxVals]
-  );
+  const latestMACD = useMemo(() => macdLine.filter(isFiniteNumber).slice(-1)[0], [macdLine]);
+  const latestADX = useMemo(() => adxVals.filter(isFiniteNumber).slice(-1)[0], [adxVals]);
   const lastVol = visCandles[visCandles.length - 1]?.v || 0;
   const avgVol = useMemo(
     () => (visCandles.length ? visCandles.reduce((a, c) => a + c.v, 0) / visCandles.length : 0),
@@ -2346,7 +2390,7 @@ export default function CandleChart() {
             </span>
           </div>
         )}
-        {activeIndicators.vwap && latestVWAP != null && (
+        {activeIndicators.vwap && (
           <div
             style={{
               display: 'flex',
@@ -2358,14 +2402,14 @@ export default function CandleChart() {
             }}
           >
             <div style={{ width: 14, height: 2, background: COL.vwap, borderRadius: 1 }} />
-            VWAP <span style={{ color: COL.vwap, fontWeight: 600 }}>{fmtPrice(latestVWAP)}</span>
+            VWAP <span style={{ color: COL.vwap, fontWeight: 600 }}>{vwapDisplay}</span>
           </div>
         )}
         {latestMACD != null && activeIndicators.macd && (
           <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>
             MACD{' '}
             <span style={{ color: latestMACD >= 0 ? COL.bull : COL.bear, fontWeight: 600 }}>
-              {latestMACD.toFixed(4)}
+              {fmtFixed(latestMACD, 4)}
             </span>
           </div>
         )}
@@ -2373,7 +2417,7 @@ export default function CandleChart() {
           <div style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>
             ADX{' '}
             <span style={{ color: latestADX > 25 ? COL.adx : 'var(--text3)', fontWeight: 600 }}>
-              {latestADX.toFixed(1)}
+              {fmtFixed(latestADX, 1)}
             </span>
           </div>
         )}
@@ -2689,7 +2733,7 @@ export default function CandleChart() {
       {activeIndicators.macd && (
         <>
           {paneLabel('MACD', {
-            val: latestMACD != null ? latestMACD.toFixed(4) : undefined,
+            val: fmtFixed(latestMACD, 4),
             col: latestMACD != null ? (latestMACD >= 0 ? COL.bull : COL.bear) : undefined,
           })}
           <canvas
@@ -2718,7 +2762,7 @@ export default function CandleChart() {
       )}
       {activeIndicators.adx && (
         <>
-          {paneLabel('ADX · Trend Strength', { val: latestADX?.toFixed(1), col: COL.adx })}
+          {paneLabel('ADX · Trend Strength', { val: fmtFixed(latestADX, 1), col: COL.adx })}
           <canvas
             ref={adxRef}
             style={{ height: 60, width: '100%', borderRadius: 'var(--radius-sm)' }}
@@ -2755,7 +2799,7 @@ export default function CandleChart() {
       {activeIndicators.obv && (
         <>
           {paneLabel('OBV · On-Balance Vol', {
-            val: obvVals.length ? fmtK(obvVals[obvVals.length - 1]) : undefined,
+            val: fmtK(obvVals[obvVals.length - 1]),
             col: COL.obv,
           })}
           <canvas
@@ -2767,8 +2811,10 @@ export default function CandleChart() {
       {activeIndicators.cvd && (
         <>
           {paneLabel('CVD · Cumul. Vol Delta', {
-            val: latesTCVD != null ? (latesTCVD >= 0 ? '+' : '') + fmtK(latesTCVD) : undefined,
-            col: latesTCVD != null ? (latesTCVD >= 0 ? COL.bull : COL.bear) : undefined,
+            val: isFiniteNumber(latesTCVD)
+              ? (latesTCVD >= 0 ? '+' : '') + fmtK(latesTCVD)
+              : fmtK(latesTCVD),
+            col: isFiniteNumber(latesTCVD) ? (latesTCVD >= 0 ? COL.bull : COL.bear) : undefined,
           })}
           <canvas
             ref={cvdRef}

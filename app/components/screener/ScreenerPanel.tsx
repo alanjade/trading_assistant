@@ -678,8 +678,8 @@ export default function ScreenerPanel() {
               )}
             </div>
           ) : sc.screenerView === 'multitf' ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="table-scroll">
+              <table className="w-full border-collapse">
                 <thead>
                   <tr>
                     {['Symbol', 'Ex', 'Price', '5m', '1h', '4h'].map((h) => (
@@ -713,8 +713,8 @@ export default function ScreenerPanel() {
             </div>
           ) : (
             /* ── Sortable table ─────────────────────────────────────────── */
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 740 }}>
+            <div className="table-scroll">
+              <table className="w-full min-w-[740px] border-collapse">
                 <thead>
                   <tr>
                     <th

@@ -1,3 +1,5 @@
+import { INDICATOR_PERIODS } from '@/lib/tradingConstants';
+
 export interface Candle {
   o: number;
   h: number;
@@ -13,8 +15,6 @@ export interface CrossoverEvent {
   idx: number;
   time: number;
 }
-
-import { INDICATOR_PERIODS } from '@/lib/tradingConstants';
 
 // ── EMA ───────────────────────────────────────────────────────────────────────
 export const emaK = (period: number) => 2 / (period + 1);
@@ -32,8 +32,18 @@ export function calcSMA(values: number[], period: number): (number | null)[] {
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
+export const DISPLAY_EMPTY = '—';
+
+export function isFiniteNumber(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function fmtFixed(value: number | null | undefined, decimals: number): string {
+  return isFiniteNumber(value) ? value.toFixed(decimals) : DISPLAY_EMPTY;
+}
+
 export function fmtPrice(p: number | null | undefined): string {
-  if (p === null || p === undefined || isNaN(p as number)) return '—';
+  if (!isFiniteNumber(p)) return DISPLAY_EMPTY;
   if (p >= 10000) return p.toFixed(1);
   if (p >= 1000) return p.toFixed(2);
   if (p >= 10) return p.toFixed(3);
@@ -46,7 +56,8 @@ export function fmtPrice(p: number | null | undefined): string {
   return match ? '0.' + match[1].padEnd(match[1].length, '0') : p.toExponential(3);
 }
 
-export function fmtK(n: number): string {
+export function fmtK(n: number | null | undefined): string {
+  if (!isFiniteNumber(n)) return DISPLAY_EMPTY;
   if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
   if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
   if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
@@ -229,7 +240,11 @@ export function makeATRState(): ATRState {
   return { prevClose: null, atr: null, seed: [] };
 }
 
-export function calcATR(candle: Candle, state: ATRState, period: number = INDICATOR_PERIODS.ATR): number | null {
+export function calcATR(
+  candle: Candle,
+  state: ATRState,
+  period: number = INDICATOR_PERIODS.ATR
+): number | null {
   const tr =
     state.prevClose === null
       ? candle.h - candle.l
@@ -595,6 +610,47 @@ export function calcVWAP(
 export function calcVWAPSeries(candles: Candle[]): ReturnType<typeof calcVWAP>[] {
   const state = makeVWAPState();
   return candles.map((c) => calcVWAP(c, state));
+}
+
+export type AnchoredVWAPStatus =
+  | 'no_anchor_selected'
+  | 'waiting_for_data'
+  | 'calculating'
+  | 'ready';
+
+export interface AnchoredVWAPSeries {
+  values: (number | null)[];
+  status: AnchoredVWAPStatus;
+}
+
+export function calcAnchoredVWAPSeries(
+  candles: Candle[],
+  anchorIndex: number | null | undefined
+): AnchoredVWAPSeries {
+  const values = candles.map(() => null as number | null);
+
+  if (anchorIndex === null || anchorIndex === undefined) {
+    return { values, status: 'no_anchor_selected' };
+  }
+
+  if (!Number.isInteger(anchorIndex) || anchorIndex < 0 || anchorIndex >= candles.length) {
+    return { values, status: 'waiting_for_data' };
+  }
+
+  let cumPV = 0;
+  let cumVol = 0;
+  let hasValue = false;
+
+  for (let i = anchorIndex; i < candles.length; i++) {
+    const candle = candles[i];
+    const typical = (candle.h + candle.l + candle.c) / 3;
+    cumPV += typical * candle.v;
+    cumVol += candle.v;
+    values[i] = cumVol > 0 ? cumPV / cumVol : null;
+    hasValue ||= values[i] !== null;
+  }
+
+  return { values, status: hasValue ? 'ready' : 'calculating' };
 }
 
 // ── CVD ───────────────────────────────────────────────────────────────────────

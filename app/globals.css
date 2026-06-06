@@ -1,5 +1,5 @@
-@import 'tailwindcss';
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600&display=swap');
+@import 'tailwindcss';
 
 :root {
   --bg: #080a0f;
@@ -82,72 +82,17 @@ main {
   }
 }
 
-/* ── 2-column grids collapse to 1 column on mobile ───────────────────────── */
-@media (max-width: 600px) {
-  [style*="gridTemplateColumns: '1fr 1fr'"],
-  [style*='gridTemplateColumns: "1fr 1fr"'],
-  [style*='grid-template-columns: 1fr 1fr'] {
-    grid-template-columns: 1fr !important;
-  }
-
-  [style*="gridTemplateColumns: 'repeat(4,1fr)'"],
-  [style*='gridTemplateColumns: "repeat(4,1fr)"'],
-  [style*='grid-template-columns: repeat(4,1fr)'] {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-/* ── Chart canvas: constrain height on mobile ─────────────────────────────── */
-@media (max-width: 640px) {
-  canvas[style*='height: 240'] {
-    height: 200px !important;
-  }
-  canvas[style*='height: 340'] {
-    height: 260px !important;
-  }
-}
-
-/* ── Sub-pane row tabs: scroll horizontally ───────────────────────────────── */
-@media (max-width: 640px) {
-  div[style*="borderBottom: '1px solid var(--border)'"] {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    flex-wrap: nowrap !important;
-  }
-}
-
-/* ── Cards: reduce padding on mobile ─────────────────────────────────────── */
-@media (max-width: 480px) {
-  [style*="borderRadius: 'var(--radius)'"],
-  [style*='borderRadius: "var(--radius)"'] {
-    padding: 8px !important;
-  }
+/* ── Responsive utility helpers ───────────────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Screener table: horizontal scroll ────────────────────────────────────── */
 @media (max-width: 768px) {
   table {
     min-width: 500px;
-  }
-
-  div[style*="overflowX: 'auto'"] {
-    -webkit-overflow-scrolling: touch;
-  }
-}
-
-/* ── Strategy builder: full width on mobile ───────────────────────────────── */
-@media (max-width: 640px) {
-  div[style*='maxWidth: 760'] {
-    max-width: 100% !important;
-  }
-}
-
-/* ── Floating tooltip / command palette ───────────────────────────────────── */
-@media (max-width: 480px) {
-  [style*='maxWidth: 560'] {
-    max-width: calc(100vw - 20px) !important;
-    left: 10px !important;
-    right: 10px !important;
   }
 }
 

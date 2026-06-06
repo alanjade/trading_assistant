@@ -10,6 +10,18 @@ interface PanelFrame {
   height: number;
 }
 
+function clampPanelFrame(frame: PanelFrame, minWidth: number, minHeight: number) {
+  const viewportWidth = typeof window === 'undefined' ? frame.width : window.innerWidth;
+  const viewportHeight = typeof window === 'undefined' ? frame.height : window.innerHeight;
+
+  const width = Math.min(Math.max(frame.width, minWidth), viewportWidth);
+  const height = Math.min(Math.max(frame.height, minHeight), viewportHeight);
+  const x = Math.min(Math.max(frame.x, 0), Math.max(0, viewportWidth - width));
+  const y = Math.min(Math.max(frame.y, 0), Math.max(0, viewportHeight - height));
+
+  return { x, y, width, height };
+}
+
 export default function DraggableResizablePanel({
   title,
   children,
@@ -27,7 +39,7 @@ export default function DraggableResizablePanel({
   className?: string;
   actions?: React.ReactNode;
 }) {
-  const [frame, setFrame] = useState(initialFrame);
+  const [frame, setFrame] = useState(() => clampPanelFrame(initialFrame, minWidth, minHeight));
   const dragStart = useRef<{ pointerX: number; pointerY: number; frame: PanelFrame } | null>(null);
 
   const startMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -47,15 +59,16 @@ export default function DraggableResizablePanel({
     const deltaY = event.clientY - dragStart.current.pointerY;
     const start = dragStart.current.frame;
 
-    setFrame(
+    const nextFrame =
       mode === 'move'
-        ? { ...start, x: start.x + deltaX, y: Math.max(0, start.y + deltaY) }
+        ? { ...start, x: start.x + deltaX, y: start.y + deltaY }
         : {
             ...start,
-            width: Math.max(minWidth, start.width + deltaX),
-            height: Math.max(minHeight, start.height + deltaY),
-          }
-    );
+            width: start.width + deltaX,
+            height: start.height + deltaY,
+          };
+
+    setFrame(clampPanelFrame(nextFrame, minWidth, minHeight));
   };
 
   const stop = () => {

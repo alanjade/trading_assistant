@@ -97,9 +97,14 @@ export default function CommandPalette({
   useEffect(() => {
     if (open && anchorRef?.current) {
       const rect = anchorRef.current.getBoundingClientRect();
+      const paletteWidth = Math.min(400, Math.max(260, window.innerWidth - 28));
+      const paletteHeight = 420;
+      const maxRight = Math.max(14, window.innerWidth - paletteWidth - 14);
+      const maxTop = Math.max(12, window.innerHeight - paletteHeight - 12);
+
       setDropPos({
-        top: rect.bottom + 6,
-        right: window.innerWidth - rect.right,
+        top: Math.min(rect.bottom + 6, maxTop),
+        right: Math.min(Math.max(14, window.innerWidth - rect.right), maxRight),
       });
     }
   }, [open, anchorRef]);
